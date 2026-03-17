@@ -13,8 +13,10 @@ import { useTranslations } from "../../hooks/useTranslations";
 
 const { width, height } = Dimensions.get("window");
 
+import type { User } from "../../types/user";
+
 interface Props {
-  user?: { id: string } | null;
+  user?: User | null;
   onLoginPress?: () => void;
   onDashboardPress?: () => void;
 }

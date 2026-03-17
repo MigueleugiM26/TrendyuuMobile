@@ -1,6 +1,7 @@
 import React from "react";
 import { ScrollView, StyleSheet, View, StatusBar } from "react-native";
 import { useRouter } from "expo-router";
+import { useUser } from "../context/user-context";
 
 import HeroSection from "../components/home/HeroSection";
 import BrandsSection from "../components/home/BrandsSection";
@@ -12,12 +13,9 @@ import FAQSection from "../components/home/FAQSection";
 import CTASection from "../components/home/CTASection";
 import FooterSection from "../components/home/FooterSection";
 
-// Swap with your actual user context when ready
-const useMockUser = () => ({ user: null as { id: string } | null });
-
 export default function HomeScreen() {
   const router = useRouter();
-  const { user } = useMockUser();
+  const { user } = useUser();
 
   return (
     <View style={styles.root}>
@@ -29,7 +27,7 @@ export default function HomeScreen() {
       >
         <HeroSection
           user={user}
-          onLoginPress={() => router.push("/")}
+          onLoginPress={() => router.push("/login")}
           onDashboardPress={() => router.push("/")}
         />
         <BrandsSection />

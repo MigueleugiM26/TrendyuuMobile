@@ -1,12 +1,12 @@
+import axiosInstance from "@/src/lib/axiosConfig";
 import axios from "axios";
-import axiosInstance from "@/lib/axiosConfig";
 
 const RedditService = {
   generateAudio: async (
     text: string,
     voiceIndex: number,
     filename: string,
-    requiredCredits: number
+    requiredCredits: number,
   ) => {
     try {
       const token = localStorage.getItem("accessToken");
@@ -22,7 +22,7 @@ const RedditService = {
           voz: voiceIndex,
           output_file: filename,
           credits: requiredCredits,
-        })
+        }),
       );
 
       const response = await axiosInstance.post<{ output_file?: string }>(
@@ -33,13 +33,13 @@ const RedditService = {
             Authorization: token ? `Bearer ${token}` : undefined,
             "Content-Type": "multipart/form-data",
           },
-        }
+        },
       );
 
       console.log("Audio generation response:", response.data);
 
       if (response.data.output_file) {
-        const baseUrl = process.env.NEXT_PUBLIC_TRENDYUU_URL_BACK;
+        const baseUrl = process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK;
         const audioUrl = response.data.output_file.startsWith("http")
           ? response.data.output_file
           : `${baseUrl}${response.data.output_file}`;
@@ -49,7 +49,7 @@ const RedditService = {
         };
       } else {
         throw new Error(
-          "Output file not found in response: " + JSON.stringify(response.data)
+          "Output file not found in response: " + JSON.stringify(response.data),
         );
       }
     } catch (error: unknown) {
@@ -57,7 +57,7 @@ const RedditService = {
       throw new Error(
         `Failed to generate audio: ${
           error instanceof Error ? error.message : "Unknown error"
-        }`
+        }`,
       );
     }
   },

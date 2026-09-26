@@ -1,23 +1,23 @@
-import axiosInstance from "@/lib/axiosConfig"
-import { isAxiosError } from "axios"
+import axiosInstance from "@/src/lib/axiosConfig";
+import { isAxiosError } from "axios";
 
 export interface VideoUploadResponse {
-  success: boolean
-  message: string
-  file_path?: string
-  preview_url?: string
+  success: boolean;
+  message: string;
+  file_path?: string;
+  preview_url?: string;
   metadata?: {
-    width: number
-    height: number
-    duration: number
-    format: string
-    size: number
-    thumbnail_url: string
-  }
-  error?: string
+    width: number;
+    height: number;
+    duration: number;
+    format: string;
+    size: number;
+    thumbnail_url: string;
+  };
+  error?: string;
 }
 
-export type UploadProgressCallback = (progress: number) => void
+export type UploadProgressCallback = (progress: number) => void;
 
 /**
  * Uploads a video file to the server
@@ -25,38 +25,50 @@ export type UploadProgressCallback = (progress: number) => void
  * @param onProgress Optional callback for tracking upload progress
  * @returns Promise with the upload response
  */
-export async function uploadVideo(file: File, onProgress?: UploadProgressCallback): Promise<VideoUploadResponse> {
+export async function uploadVideo(
+  file: File,
+  onProgress?: UploadProgressCallback,
+): Promise<VideoUploadResponse> {
   try {
     // Create form data for the API request
-    const formData = new FormData()
-    formData.append("file", file)
+    const formData = new FormData();
+    formData.append("file", file);
 
     // Make API request to upload the video
-    const response = await axiosInstance.post<VideoUploadResponse>("/api/upload_video", formData, {
-      // Updated endpoint
-      headers: {
-        "Content-Type": "multipart/form-data",
+    const response = await axiosInstance.post<VideoUploadResponse>(
+      "/api/upload_video",
+      formData,
+      {
+        // Updated endpoint
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total && onProgress) {
+            const progress = Math.round(
+              (progressEvent.loaded / progressEvent.total) * 100,
+            );
+            onProgress(progress);
+          }
+        },
       },
-      onUploadProgress: (progressEvent) => {
-        if (progressEvent.total && onProgress) {
-          const progress = Math.round((progressEvent.loaded / progressEvent.total) * 100)
-          onProgress(progress)
-        }
-      },
-    })
+    );
 
-    return response.data
+    return response.data;
   } catch (error) {
     if (isAxiosError(error) && error.response) {
       // Return the error response from the server if available
-      return error.response.data as VideoUploadResponse
+      return error.response.data as VideoUploadResponse;
     } else {
       // Create a generic error response
       return {
         success: false,
-        message: error instanceof Error ? error.message : "An unknown error occurred during upload",
+        message:
+          error instanceof Error
+            ? error.message
+            : "An unknown error occurred during upload",
         error: error instanceof Error ? error.message : "Unknown error",
-      }
+      };
     }
   }
 }
@@ -66,19 +78,24 @@ export async function uploadVideo(file: File, onProgress?: UploadProgressCallbac
  * @param videoId The ID of the video to get information for
  * @returns Promise with the video information
  */
-export async function getVideoInfo(videoId: string): Promise<VideoUploadResponse> {
+export async function getVideoInfo(
+  videoId: string,
+): Promise<VideoUploadResponse> {
   try {
-    const response = await axiosInstance.get<VideoUploadResponse>(`/video/${videoId}`)
-    return response.data
+    const response = await axiosInstance.get<VideoUploadResponse>(
+      `/video/${videoId}`,
+    );
+    return response.data;
   } catch (error) {
     if (isAxiosError(error) && error.response) {
-      return error.response.data as VideoUploadResponse
+      return error.response.data as VideoUploadResponse;
     } else {
       return {
         success: false,
-        message: error instanceof Error ? error.message : "An unknown error occurred",
+        message:
+          error instanceof Error ? error.message : "An unknown error occurred",
         error: error instanceof Error ? error.message : "Unknown error",
-      }
+      };
     }
   }
 }
@@ -88,7 +105,6 @@ export async function getVideoInfo(videoId: string): Promise<VideoUploadResponse
  *
  * import { uploadVideo } from '@/services/upload_video';
  *
- * // In your component:
  * const handleUpload = async (file: File) => {
  *   setIsUploading(true);
  *   setUploadProgress(0);
@@ -112,4 +128,3 @@ export async function getVideoInfo(videoId: string): Promise<VideoUploadResponse
  *   }
  * };
  */
-

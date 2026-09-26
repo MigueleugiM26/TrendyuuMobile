@@ -1,3 +1,6 @@
+// types/user.ts
+// No web dependencies — safe to use as-is in React Native.
+
 export interface DecodedToken {
   user_id: string;
   exp: number;
@@ -14,13 +17,19 @@ export interface TotalVideoData {
   viewed_users: string[];
 }
 
+export interface TotalTemplateData {
+  viewed_templates: string[];
+  liked_templates: string[];
+}
+
 type SocialPlatform =
   | "youtube"
   | "tiktok"
   | "instagram"
   | "twitter"
   | "facebook"
-  | "kwai";
+  | "kwai"
+  | "linkedin";
 
 export interface ConnectedAccount {
   id: string;
@@ -44,6 +53,7 @@ export interface User {
   stripeSubscriptionId: string;
   plan?: string;
   totalVideoData: TotalVideoData;
+  totalTemplateData: TotalTemplateData;
   socialMediaLinks: Record<string, string>;
   weeklySocialViews: number;
   status?: string;
@@ -52,6 +62,19 @@ export interface User {
   connectedAccounts: ConnectedAccount[];
   isFreeTrialActive: boolean;
   freeTrialEndDate: string;
+  hasUsedDiscount: boolean;
+  hasUsedAffiliateCoupon: boolean;
   region: string;
   dev?: boolean;
+  subscriptionCancelAtPeriodEnd: boolean;
+  stripeSubscriptionStatus: string;
 }
+
+export type UserPlan = "free" | "essential" | "creator" | "agency";
+
+export const PLAN_HIERARCHY: Record<UserPlan, number> = {
+  free: 0,
+  essential: 1,
+  creator: 2,
+  agency: 3,
+};

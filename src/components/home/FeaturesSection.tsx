@@ -1,13 +1,13 @@
-import React, { useState, useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
-  View,
+  Animated,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Dimensions,
-  ScrollView,
-  Animated,
-  Image,
+  View,
 } from "react-native";
 import { useTranslations } from "../../hooks/useTranslations";
 
@@ -88,7 +88,7 @@ export default function FeaturesSection() {
         ))}
       </ScrollView>
 
-      {/* Feature detail — mirrors FeatureDisplay */}
+      {/* Feature detail */}
       <Animated.View style={[styles.detail, { opacity: contentFade }]}>
         {/* Number + subtitle header */}
         <View style={styles.detailHeader}>

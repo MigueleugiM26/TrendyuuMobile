@@ -1,7 +1,7 @@
+import { UserProvider } from "@/src/context/user-context";
+import { LanguageProvider } from "@/src/hooks/useTranslations";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { LanguageProvider } from "@/src/hooks/useTranslations";
-import { UserProvider } from "@/src/context/user-context";
 
 export default function RootLayout() {
   return (

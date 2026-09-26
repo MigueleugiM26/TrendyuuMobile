@@ -1,37 +1,47 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import type {
+  DecodedToken,
+  TotalTemplateData,
+  TotalVideoData,
+  User,
+} from "@/src/types/user";
+import { authEvents } from "@/src/utils/auth-events";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { jwtDecode } from "jwt-decode";
-import type { DecodedToken, TotalVideoData, User } from "@/src/types/user";
+import type { ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
-// ─── Token storage keys — same names as web localStorage keys ────────────────
-const ACCESS_TOKEN_KEY = "accessToken";
-const REFRESH_TOKEN_KEY = "refreshToken";
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+const API_BASE_URL = process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK;
 
-// ─── Module-level cache (same pattern as web) ─────────────────────────────────
+// ---------------------------------------------------------------------------
+// Module-level cache (survives re-renders, cleared on logout)
+// ---------------------------------------------------------------------------
 let refreshPromise: Promise<string | null> | null = null;
 let globalUser: (User & { accessToken: string }) | null = null;
 let globalCredits: { value: number; nextRenewal: Date | null } | null = null;
 
-// ─── Helpers — AsyncStorage drop-in wrappers ──────────────────────────────────
-const storage = {
-  get: (key: string) => AsyncStorage.getItem(key),
-  set: (key: string, value: string) => AsyncStorage.setItem(key, value),
-  remove: (key: string) => AsyncStorage.removeItem(key),
-};
-
+// ---------------------------------------------------------------------------
+// Token helpers
+// ---------------------------------------------------------------------------
 const refreshAccessToken = async (
   refreshToken: string,
 ): Promise<string | null> => {
   if (refreshPromise) return refreshPromise;
 
-  refreshPromise = fetch(
-    `${process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK}/api/authentication/refresh`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh: refreshToken }),
-    },
-  )
+  refreshPromise = fetch(`${API_BASE_URL}/api/authentication/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh: refreshToken }),
+  })
     .then(async (response) => {
       if (!response.ok) {
         const errorData = await response.json();
@@ -39,9 +49,11 @@ const refreshAccessToken = async (
         throw new Error("Refresh token invalid or expired");
       }
       const data = await response.json();
-      // AsyncStorage instead of localStorage
-      await storage.set(ACCESS_TOKEN_KEY, data.access);
-      await storage.set(REFRESH_TOKEN_KEY, data.refresh);
+      // AsyncStorage writes are fire-and-forget here; errors logged below
+      await Promise.all([
+        AsyncStorage.setItem("accessToken", data.access),
+        AsyncStorage.setItem("refreshToken", data.refresh),
+      ]);
       return data.access as string;
     })
     .catch((err) => {
@@ -55,7 +67,9 @@ const refreshAccessToken = async (
   return refreshPromise;
 };
 
-// ─── Context type — identical to web ─────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Context type
+// ---------------------------------------------------------------------------
 type UserContextType = {
   user: User | null;
   loading: boolean;
@@ -78,14 +92,23 @@ type UserContextType = {
   freeTrialEndDate: string;
   region: string;
   dev: boolean;
+  hasUsedDiscount: boolean;
+  hasUsedAffiliateCoupon: boolean;
+  totalVideoData: TotalVideoData | undefined;
+  totalTemplateData: TotalTemplateData | undefined;
+  subscriptionCancelAtPeriodEnd: boolean;
+  stripeSubscriptionStatus: string;
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-export const UserProvider = ({ children }: { children: React.ReactNode }) => {
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
+export const UserProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(globalUser);
   const [loading, setLoading] = useState(!globalUser);
+
   const [userCredits, setUserCredits] = useState<number | null>(null);
   const [clipsCredits, setClipsCredits] = useState<{
     autoclip: number;
@@ -95,45 +118,77 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   const [nextRenewalDate, setNextRenewalDate] = useState<Date | null>(null);
   const [currentPlan, setCurrentPlan] = useState<string>("free");
   const [planPeriod, setPlanPeriod] = useState<string>("mensal");
-  const [isFreeTrialActive, setIsFreeTrialActive] = useState(false);
-  const [freeTrialEndDate, setFreeTrialEndDate] = useState("");
-  const [region, setRegion] = useState("US");
-  const [dev, setDev] = useState(false);
+  const [isFreeTrialActive, setIsFreeTrialActive] = useState<boolean>(false);
+  const [totalVideoData, setTotalVideoData] = useState<
+    TotalVideoData | undefined
+  >();
+  const [totalTemplateData, setTotalTemplateData] = useState<
+    TotalTemplateData | undefined
+  >();
+  const [freeTrialEndDate, setFreeTrialEndDate] = useState<string>("");
+  const [region, setRegion] = useState<string>("US");
+  const [dev, setDev] = useState<boolean>(false);
+  const [hasUsedDiscount, setHasUsedDiscount] = useState<boolean>(
+    globalUser?.hasUsedDiscount ?? false,
+  );
+  const [hasUsedAffiliateCoupon, setHasUsedAffiliateCoupon] = useState<boolean>(
+    globalUser?.hasUsedAffiliateCoupon ?? false,
+  );
+  const [subscriptionCancelAtPeriodEnd, setSubscriptionCancelAtPeriodEnd] =
+    useState<boolean>(globalUser?.subscriptionCancelAtPeriodEnd ?? false);
+  const [stripeSubscriptionStatus, setStripeSubscriptionStatus] =
+    useState<string>(globalUser?.stripeSubscriptionStatus ?? "");
 
-  // ── logout ──────────────────────────────────────────────────────────────────
-  const logout = async () => {
-    // AsyncStorage instead of localStorage.removeItem
-    await storage.remove(ACCESS_TOKEN_KEY);
-    await storage.remove(REFRESH_TOKEN_KEY);
+  const TOKEN_REFRESH_INTERVAL = 3 * 60 * 1000; // 3 minutes
+  const TOKEN_EXPIRY_BUFFER = 3 * 60 * 1000;
+  const isRefreshingRef = useRef(false);
+
+  // -------------------------------------------------------------------------
+  // logout
+  // -------------------------------------------------------------------------
+  const logout = useCallback(() => {
+    // Fire-and-forget; we don't need to await these for UI to update
+    AsyncStorage.multiRemove(["accessToken", "refreshToken"]);
+
     setUser(null);
     setUserCredits(null);
     setClipsCredits(null);
     setCurrentPlan("free");
     setPlanPeriod("mensal");
     setIsFreeTrialActive(false);
+    setTotalVideoData(undefined);
+    setTotalTemplateData(undefined);
     setFreeTrialEndDate("");
     setNextRenewalDate(null);
     setRegion("US");
     setDev(false);
+    setHasUsedDiscount(false);
+    setHasUsedAffiliateCoupon(false);
+    setSubscriptionCancelAtPeriodEnd(false);
+    setStripeSubscriptionStatus("");
     globalUser = null;
     globalCredits = null;
-  };
+  }, []);
 
-  // ── refreshCredits ──────────────────────────────────────────────────────────
-  const refreshCredits = async () => {
+  // -------------------------------------------------------------------------
+  // refreshCredits
+  // -------------------------------------------------------------------------
+  const refreshCredits = useCallback(async () => {
     setIsLoadingCredits(true);
     try {
-      const token = await storage.get(ACCESS_TOKEN_KEY);
+      const token = await AsyncStorage.getItem("accessToken");
       if (!token) throw new Error("Not authenticated");
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK}/api/stripe/credits/get_credits/`,
+        `${API_BASE_URL}/api/stripe/credits/get_credits/`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
+
       if (!response.ok) throw new Error("Failed to fetch credits");
 
       const data: { available?: number; nextRenewal?: string } =
         await response.json();
+
       const credits = data.available ?? 0;
       const renewal = data.nextRenewal ? new Date(data.nextRenewal) : null;
 
@@ -147,16 +202,18 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
     } finally {
       setIsLoadingCredits(false);
     }
-  };
+  }, []);
 
-  // ── fetchUser ───────────────────────────────────────────────────────────────
-  const fetchUser = async () => {
-    // AsyncStorage is async — await both reads
-    let accessToken = await storage.get(ACCESS_TOKEN_KEY);
-    const refreshToken = await storage.get(REFRESH_TOKEN_KEY);
+  // -------------------------------------------------------------------------
+  // fetchUser
+  // -------------------------------------------------------------------------
+  const fetchUser = useCallback(async () => {
+    // AsyncStorage reads are async — key difference from the web version
+    let accessToken = await AsyncStorage.getItem("accessToken");
+    const refreshToken = await AsyncStorage.getItem("refreshToken");
 
     if (!accessToken || !refreshToken) {
-      await logout();
+      logout();
       return;
     }
 
@@ -167,15 +224,16 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       if (isExpired) {
         accessToken = await refreshAccessToken(refreshToken);
         if (!accessToken) {
-          await logout();
+          logout();
           return;
         }
       }
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK}/api/authentication/users/${decoded.user_id}`,
+        `${API_BASE_URL}/api/authentication/users/${decoded.user_id}`,
         { headers: { Authorization: `Bearer ${accessToken}` } },
       );
+
       if (!response.ok) throw new Error("Failed to fetch user");
 
       const data: User = await response.json();
@@ -189,125 +247,206 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
       setClipsCredits(data.clipsCredits ?? { autoclip: 0, shortGenerator: 0 });
       setPlanPeriod(data.planPeriod || "mensal");
       setIsFreeTrialActive(data.isFreeTrialActive || false);
+      setTotalVideoData(data.totalVideoData);
+      setTotalTemplateData(data.totalTemplateData);
       setFreeTrialEndDate(data.freeTrialEndDate || "");
-      setRegion(data.region || "US");
+      setRegion(data.region || "BR");
       setDev(data.dev || false);
+      setHasUsedDiscount(data.hasUsedDiscount ?? false);
+      setHasUsedAffiliateCoupon(data.hasUsedAffiliateCoupon ?? false);
+      setSubscriptionCancelAtPeriodEnd(
+        data.subscriptionCancelAtPeriodEnd ?? false,
+      );
+      setStripeSubscriptionStatus(data.stripeSubscriptionStatus ?? "");
 
       if (!globalCredits) await refreshCredits();
     } catch (err) {
       console.error("Error fetching user:", err);
-      await logout();
+      logout();
     }
-  };
+  }, [logout, refreshCredits]);
 
-  // ── refreshVideoData ────────────────────────────────────────────────────────
-  const refreshVideoData = async () => {
+  // -------------------------------------------------------------------------
+  // refreshVideoData
+  // -------------------------------------------------------------------------
+  const refreshVideoData = useCallback(async () => {
     if (!user) return;
     setIsLoadingCredits(true);
     try {
-      const token = await storage.get(ACCESS_TOKEN_KEY);
+      const token = await AsyncStorage.getItem("accessToken");
       if (!token) throw new Error("Not authenticated");
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK}/api/authentication/users/${user.id}/partial`,
+        `${API_BASE_URL}/api/authentication/users/${user.id}/partial`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      if (!response.ok) throw new Error("Failed to fetch video data");
 
-      const data: { totalVideoData?: Partial<TotalVideoData> } =
-        await response.json();
-      if (data.totalVideoData) {
-        setUser((prev) =>
-          prev
-            ? {
-                ...prev,
-                totalVideoData: {
-                  ...prev.totalVideoData,
-                  ...data.totalVideoData,
-                },
-              }
-            : prev,
-        );
-      }
+      if (!response.ok) throw new Error("Failed to fetch data");
+
+      const data = await response.json();
+      setTotalVideoData(data.totalVideoData || {});
+      setTotalTemplateData(data.totalTemplateData || {});
+      setUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              totalVideoData: data.totalVideoData || {},
+              totalTemplateData: data.totalTemplateData || {},
+            }
+          : prev,
+      );
     } catch (err) {
       console.error("Error fetching video data:", err);
     } finally {
       setIsLoadingCredits(false);
     }
-  };
+  }, [user]);
 
-  // ── subtractCredits / subtractClipsCredits — identical to web ───────────────
-  const subtractCredits = (amount: number) => {
-    setUserCredits((prev) => {
-      const newVal = prev !== null ? Math.max(prev - amount, 0) : 0;
-      globalCredits = { value: newVal, nextRenewal: nextRenewalDate };
-      return newVal;
-    });
-  };
+  // -------------------------------------------------------------------------
+  // subtractCredits / subtractClipsCredits
+  // -------------------------------------------------------------------------
+  const subtractCredits = useCallback(
+    (amount: number) => {
+      setUserCredits((prev) => {
+        const newVal = prev !== null ? Math.max(prev - amount, 0) : 0;
+        globalCredits = { value: newVal, nextRenewal: nextRenewalDate };
+        return newVal;
+      });
+    },
+    [nextRenewalDate],
+  );
 
-  const subtractClipsCredits = (delta: {
-    autoclip?: number;
-    shortGenerator?: number;
-  }) => {
-    setClipsCredits((prev) => {
-      const current = prev ??
-        user?.clipsCredits ?? { autoclip: 0, shortGenerator: 0 };
-      const newVal = {
-        autoclip: Math.max(current.autoclip - (delta.autoclip ?? 0), 0),
-        shortGenerator: Math.max(
-          current.shortGenerator - (delta.shortGenerator ?? 0),
-          0,
-        ),
-      };
-      setUser((u) => (u ? { ...u, clipsCredits: newVal } : u));
-      if (globalUser) globalUser = { ...globalUser, clipsCredits: newVal };
-      return newVal;
-    });
-  };
+  const subtractClipsCredits = useCallback(
+    (delta: { autoclip?: number; shortGenerator?: number }) => {
+      setClipsCredits((prev) => {
+        const current = prev ??
+          user?.clipsCredits ?? { autoclip: 0, shortGenerator: 0 };
+        const newVal = {
+          autoclip: Math.max(current.autoclip - (delta.autoclip ?? 0), 0),
+          shortGenerator: Math.max(
+            current.shortGenerator - (delta.shortGenerator ?? 0),
+            0,
+          ),
+        };
+        setUser((u) => (u ? { ...u, clipsCredits: newVal } : u));
+        if (globalUser) globalUser = { ...globalUser, clipsCredits: newVal };
+        return newVal;
+      });
+    },
+    [user],
+  );
 
-  // ── Bootstrap on mount ──────────────────────────────────────────────────────
+  // -------------------------------------------------------------------------
+  // Proactive token refresh interval
+  // -------------------------------------------------------------------------
+  const checkAndRefreshToken = useCallback(async () => {
+    const accessToken = await AsyncStorage.getItem("accessToken");
+    const refreshToken = await AsyncStorage.getItem("refreshToken");
+
+    if (!accessToken || !refreshToken) return;
+
+    try {
+      const decoded: DecodedToken = jwtDecode(accessToken);
+      const expiresIn = decoded.exp * 1000 - Date.now();
+
+      if (expiresIn < TOKEN_EXPIRY_BUFFER && !isRefreshingRef.current) {
+        isRefreshingRef.current = true;
+        const newToken = await refreshAccessToken(refreshToken);
+        isRefreshingRef.current = false;
+
+        if (newToken && globalUser) {
+          globalUser = { ...globalUser, accessToken: newToken };
+          setUser((prev) => (prev ? { ...prev, accessToken: newToken } : prev));
+        }
+      }
+    } catch (error) {
+      console.error("Error checking token:", error);
+      isRefreshingRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
-    (async () => {
-      const accessToken = await storage.get(ACCESS_TOKEN_KEY);
-      const refreshToken = await storage.get(REFRESH_TOKEN_KEY);
+    checkAndRefreshToken();
+    const intervalId = setInterval(
+      checkAndRefreshToken,
+      TOKEN_REFRESH_INTERVAL,
+    );
+    return () => clearInterval(intervalId);
+  }, [checkAndRefreshToken]);
+
+  // -------------------------------------------------------------------------
+  // Initial load
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const init = async () => {
+      const accessToken = await AsyncStorage.getItem("accessToken");
+      const refreshToken = await AsyncStorage.getItem("refreshToken");
 
       if (!accessToken || !refreshToken) {
-        if (user || globalUser) await logout();
+        if (user || globalUser) logout();
         setLoading(false);
         return;
       }
 
-      // Cache hit — same token still valid
+      if (globalUser && globalUser.accessToken !== accessToken) {
+        globalUser = null;
+        globalCredits = null;
+      }
+
       if (globalUser && globalUser.accessToken === accessToken) {
         setUser(globalUser);
         setCurrentPlan(globalUser.currentPlan || "free");
         setPlanPeriod(globalUser.planPeriod || "mensal");
         setIsFreeTrialActive(globalUser.isFreeTrialActive || false);
+        setTotalVideoData(globalUser.totalVideoData);
+        setTotalTemplateData(globalUser.totalTemplateData);
         setFreeTrialEndDate(globalUser.freeTrialEndDate || "");
-        setRegion(globalUser.region || "US");
+        setRegion(globalUser.region || "BR");
         setDev(globalUser.dev || false);
+        setHasUsedDiscount(globalUser.hasUsedDiscount ?? false);
+        setHasUsedAffiliateCoupon(globalUser.hasUsedAffiliateCoupon ?? false);
         setClipsCredits(
           globalUser.clipsCredits ?? { autoclip: 0, shortGenerator: 0 },
         );
+        setSubscriptionCancelAtPeriodEnd(
+          globalUser.subscriptionCancelAtPeriodEnd || false,
+        );
+        setStripeSubscriptionStatus(globalUser.stripeSubscriptionStatus || "");
+
         if (globalCredits) {
           setUserCredits(globalCredits.value);
           setNextRenewalDate(globalCredits.nextRenewal);
         } else {
           await refreshCredits();
         }
+
         setLoading(false);
         return;
       }
 
-      // Token changed or no cache — refetch
-      globalUser = null;
-      globalCredits = null;
       setLoading(true);
       await fetchUser();
       setLoading(false);
-    })();
+    };
+
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Note: No window.addEventListener needed — mobile has no multi-tab scenario
+
+  // -------------------------------------------------------------------------
+  // Listen for post-login events (replaces window "userLoggedIn" event)
+  // Call authEvents.emit("userLoggedIn") after storing tokens on OAuth/login.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    const unsubscribe = authEvents.on("userLoggedIn", () => {
+      globalUser = null;
+      globalCredits = null;
+      setLoading(true);
+      fetchUser().finally(() => setLoading(false));
+    });
+
+    return unsubscribe;
+  }, [fetchUser]);
 
   return (
     <UserContext.Provider
@@ -330,6 +469,12 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
         freeTrialEndDate,
         region,
         dev,
+        hasUsedDiscount,
+        hasUsedAffiliateCoupon,
+        totalVideoData,
+        totalTemplateData,
+        subscriptionCancelAtPeriodEnd,
+        stripeSubscriptionStatus,
       }}
     >
       {children}
@@ -337,6 +482,9 @@ export const UserProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 export const useUser = () => {
   const ctx = useContext(UserContext);
   if (!ctx) throw new Error("useUser must be used inside a UserProvider");

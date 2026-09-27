@@ -1,3 +1,9 @@
+import { useTranslations } from "@/src/hooks/useTranslations";
+import { notifyLoginSuccess } from "@/src/lib/auth-utils";
+import { setAuthToken } from "@/src/lib/axiosConfig";
+import { toastError } from "@/src/lib/toast";
+import { getBufferedAffiliateCode } from "@/src/utils/affiliates";
+import { FontAwesome5 } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ExpoLinking from "expo-linking";
 import { useRouter } from "expo-router";
@@ -11,16 +17,10 @@ import {
   Image,
   Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useTranslations } from "../hooks/useTranslations";
-import { notifyLoginSuccess } from "../lib/auth-utils";
-import { setAuthToken } from "../lib/axiosConfig";
-import { toastError } from "../lib/toast";
-import { getBufferedAffiliateCode } from "../utils/affiliates";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -62,64 +62,31 @@ const slides = [
 
 // ─── Provider definitions ─────────────────────────────────────────────────────
 
-const GoogleIcon = () => (
-  <Image
-    source={{
-      uri: "https://cdn-frontend.trendyuu.com/public/logos/google.png",
-    }}
-    style={styles.providerIcon}
-  />
-);
-
-// SVG icons are inlined as small PNGs hosted on your CDN, or you can use
-// react-native-svg if you prefer. The X / Twitter icon below uses a text glyph
-// since it's a simple shape.
 const providers = [
-  { id: "google", name: "Google", fullRow: true, Icon: GoogleIcon },
+  {
+    id: "google",
+    name: "Google",
+    Icon: () => <FontAwesome5 name="google" size={18} color="#fff" />,
+  },
   {
     id: "microsoft",
     name: "Microsoft",
-    fullRow: false,
-    Icon: () => (
-      <View style={styles.msGrid}>
-        <View style={[styles.msCell, { backgroundColor: "#f35325" }]} />
-        <View style={[styles.msCell, { backgroundColor: "#81bc06" }]} />
-        <View style={[styles.msCell, { backgroundColor: "#05a6f0" }]} />
-        <View style={[styles.msCell, { backgroundColor: "#ffba08" }]} />
-      </View>
-    ),
+    Icon: () => <FontAwesome5 name="windows" size={18} color="#fff" />,
   },
   {
     id: "twitter",
     name: "X",
-    fullRow: false,
     Icon: () => <Text style={styles.xIcon}>𝕏</Text>,
   },
   {
     id: "tiktok",
     name: "TikTok",
-    fullRow: false,
-    Icon: () => (
-      <Image
-        source={{
-          uri: "https://cdn-frontend.trendyuu.com/public/logos/tiktok.png",
-        }}
-        style={styles.providerIcon}
-      />
-    ),
+    Icon: () => <FontAwesome5 name="tiktok" size={18} color="#fff" />,
   },
   {
     id: "linkedin",
     name: "LinkedIn",
-    fullRow: false,
-    Icon: () => (
-      <Image
-        source={{
-          uri: "https://cdn-frontend.trendyuu.com/public/logos/linkedin.png",
-        }}
-        style={styles.providerIcon}
-      />
-    ),
+    Icon: () => <FontAwesome5 name="linkedin" size={18} color="#fff" />,
   },
 ];
 
@@ -253,35 +220,14 @@ export default function LoginScreen() {
       {/* Dark overlay */}
       <View style={[StyleSheet.absoluteFill, styles.overlay]} />
 
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* ── Slide text ─────────────────────────────────────── */}
+      <View style={styles.scroll}>
+        {/* ── Slide title only (first line, smaller) ─────────── */}
         <Animated.View style={[styles.slideText, { opacity: fadeAnim }]}>
           <Text style={styles.slideTitle}>
             {t(slide.titleKey)}{" "}
             <Text style={styles.slideHighlight}>{t(slide.highlightKey)}</Text>
           </Text>
-          <Text style={styles.slideDesc}>{t(slide.descriptionKey)}</Text>
-          <Text style={styles.slideSubDesc}>{t(slide.subDescriptionKey)}</Text>
         </Animated.View>
-
-        {/* ── Slide indicators ───────────────────────────────── */}
-        <View style={styles.indicators}>
-          {slides.map((_, i) => (
-            <Pressable
-              key={i}
-              onPress={() => goToSlide(i)}
-              style={[
-                styles.indicator,
-                i === slideIndex
-                  ? styles.indicatorActive
-                  : styles.indicatorInactive,
-              ]}
-            />
-          ))}
-        </View>
 
         {/* ── Card ───────────────────────────────────────────── */}
         <View style={styles.card}>
@@ -300,7 +246,6 @@ export default function LoginScreen() {
           </View>
 
           <Text style={styles.welcome}>{t("LoginPage.welcome")}</Text>
-          <Text style={styles.subtitle}>{t("LoginPage.subtitle")}</Text>
 
           {/* Divider */}
           <View style={styles.dividerRow}>
@@ -311,7 +256,7 @@ export default function LoginScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Provider buttons */}
+          {/* Provider buttons — all full width, stacked */}
           <View style={styles.providersGrid}>
             {providers.map((provider) => {
               const loading = isLoading === provider.id;
@@ -324,7 +269,6 @@ export default function LoginScreen() {
                   disabled={anyLoading}
                   style={({ pressed }) => [
                     styles.providerBtn,
-                    provider.fullRow && styles.providerBtnFull,
                     pressed && styles.providerBtnPressed,
                     anyLoading && styles.providerBtnDisabled,
                   ]}
@@ -373,7 +317,7 @@ export default function LoginScreen() {
             .
           </Text>
         </View>
-      </ScrollView>
+      </View>
     </View>
   );
 }
@@ -393,54 +337,26 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.55)",
   },
   scroll: {
-    flexGrow: 1,
-    justifyContent: "flex-end",
+    flex: 1,
+    justifyContent: "center",
     padding: 20,
     paddingBottom: 36,
+    gap: 20,
   },
 
-  // ── Slide text
+  // ── Slide text (title only)
   slideText: {
-    marginBottom: 16,
+    alignItems: "center",
   },
   slideTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
     color: "#fff",
-    lineHeight: 34,
+    lineHeight: 30,
+    textAlign: "center",
   },
   slideHighlight: {
     color: "#ec4899",
-  },
-  slideDesc: {
-    color: "#d4d4d8",
-    fontSize: 15,
-    marginTop: 8,
-    lineHeight: 22,
-  },
-  slideSubDesc: {
-    color: "#a1a1aa",
-    fontSize: 13,
-    marginTop: 4,
-  },
-
-  // ── Indicators
-  indicators: {
-    flexDirection: "row",
-    gap: 6,
-    marginBottom: 20,
-  },
-  indicator: {
-    height: 4,
-    borderRadius: 2,
-  },
-  indicatorActive: {
-    width: 32,
-    backgroundColor: "#ec4899",
-  },
-  indicatorInactive: {
-    width: 16,
-    backgroundColor: "#52525b",
   },
 
   // ── Card
@@ -478,13 +394,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#fff",
     textAlign: "center",
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#a1a1aa",
-    textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
 
   // ── Divider
@@ -506,8 +416,7 @@ const styles = StyleSheet.create({
 
   // ── Provider buttons
   providersGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "column",
     gap: 10,
     marginBottom: 16,
   },
@@ -519,13 +428,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#27272a",
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 14,
-    gap: 8,
-    // Half width minus half the gap = ~47% so two fit per row
-    width: "47%",
-  },
-  providerBtnFull: {
+    gap: 10,
     width: "100%",
   },
   providerBtnPressed: {
@@ -540,25 +445,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     flexShrink: 1,
   },
-  providerIcon: {
-    width: 18,
-    height: 18,
-    resizeMode: "contain",
-  },
-
-  // ── Microsoft grid icon
-  msGrid: {
-    width: 18,
-    height: 18,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 1,
-  },
-  msCell: {
-    width: 8,
-    height: 8,
-  },
-
   // ── X / Twitter icon
   xIcon: {
     color: "#fff",

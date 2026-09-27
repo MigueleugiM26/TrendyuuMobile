@@ -1,2 +1,2 @@
-import HomeScreen from "@/src/screens/HomeScreen";
-export default HomeScreen;
+import MainPage from "@/src/components/main_page/main-page";
+export default MainPage;

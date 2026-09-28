@@ -4,10 +4,18 @@ import { toastError } from "@/src/lib/toast";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 export default function AuthCallbackScreen() {
   const router = useRouter();
+  // On native, tokens arrive as Expo Router search params.
+  // On web, they arrive in the URL which Expo Router also parses the same way.
   const params = useLocalSearchParams<{
     access?: string;
     refresh?: string;
@@ -15,7 +23,16 @@ export default function AuthCallbackScreen() {
 
   useEffect(() => {
     async function handleCallback() {
-      const { access, refresh } = params;
+      let access = params.access;
+      let refresh = params.refresh;
+
+      // On web, useLocalSearchParams may lag one render — read directly from
+      // window.location.search as a fallback.
+      if (Platform.OS === "web" && (!access || !refresh)) {
+        const search = new URLSearchParams(window.location.search);
+        access = search.get("access") ?? undefined;
+        refresh = search.get("refresh") ?? undefined;
+      }
 
       if (access && refresh) {
         await AsyncStorage.multiSet([
@@ -32,7 +49,7 @@ export default function AuthCallbackScreen() {
     }
 
     handleCallback();
-  }, []);
+  }, [params.access, params.refresh]);
 
   return (
     <View style={styles.root}>

@@ -16,6 +16,7 @@ import {
   Easing,
   Image,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -182,25 +183,29 @@ export default function LoginScreen() {
   async function handleOAuthLogin(providerId: string) {
     setIsLoading(providerId);
 
-    // Append buffered affiliate code if present
     const affiliateCode = await getBufferedAffiliateCode();
     const affiliateParam = affiliateCode
       ? `&affiliate=${encodeURIComponent(affiliateCode)}`
       : "";
 
-    // The mobile callback deep link — must be registered in your backend's
-    // ALLOWED_REDIRECT_URLS (or equivalent). Add MOBILE_FRONTEND_URL env var
-    // pointing to "trendyuu://auth/callback" on the backend side.
+    if (Platform.OS === "web") {
+      // On web: same-tab redirect. The backend will redirect back to
+      // /auth/callback?access=...&refresh=... and callback.tsx handles it.
+      const webCallback = `${window.location.origin}/auth/callback`;
+      const next = encodeURIComponent(webCallback);
+      const oauthUrl = `${BACKEND}/api/authentication/${providerId}/login?next=${next}${affiliateParam}`;
+      window.location.href = oauthUrl;
+      return; // don't reset isLoading — page is navigating away
+    }
+
+    // Native: in-app browser sheet (SFSafariViewController / Chrome Custom Tab)
     const mobileCallback = ExpoLinking.createURL(MOBILE_CALLBACK_PATH);
     const next = encodeURIComponent(mobileCallback);
-
     const oauthUrl = `${BACKEND}/api/authentication/${providerId}/login?next=${next}${affiliateParam}`;
 
-    // Opens in an in-app browser tab; on iOS uses SFSafariViewController,
-    // on Android uses Chrome Custom Tabs. No new page / external browser.
     await WebBrowser.openAuthSessionAsync(oauthUrl, mobileCallback);
 
-    // If the user dismissed the browser without completing auth, reset loading
+    // User dismissed the browser without completing auth
     setIsLoading(null);
   }
 

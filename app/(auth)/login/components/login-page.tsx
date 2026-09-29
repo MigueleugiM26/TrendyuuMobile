@@ -188,24 +188,23 @@ export default function LoginScreen() {
       ? `&affiliate=${encodeURIComponent(affiliateCode)}`
       : "";
 
+    const mobileCallback = Platform.select({
+      web: `${window.location.origin}/auth/callback`,
+      default: `${MOBILE_CALLBACK_SCHEME}://${MOBILE_CALLBACK_PATH}`,
+    });
+
+    console.log("🔗 mobileCallback =", mobileCallback); // ← add this
+    console.log("📱 Platform.OS =", Platform.OS); // ← and this
+
     if (Platform.OS === "web") {
-      // On web: same-tab redirect. The backend will redirect back to
-      // /auth/callback?access=...&refresh=... and callback.tsx handles it.
-      const webCallback = `${window.location.origin}/auth/callback`;
-      const next = encodeURIComponent(webCallback);
-      const oauthUrl = `${BACKEND}/api/authentication/${providerId}/login?next=${next}${affiliateParam}`;
-      window.location.href = oauthUrl;
-      return; // don't reset isLoading — page is navigating away
+      const next = encodeURIComponent(mobileCallback!);
+      window.location.href = `${BACKEND}/api/authentication/${providerId}/login?next=${next}${affiliateParam}`;
+      return;
     }
 
-    // Native: in-app browser sheet (SFSafariViewController / Chrome Custom Tab)
-    const mobileCallback = ExpoLinking.createURL(MOBILE_CALLBACK_PATH);
-    const next = encodeURIComponent(mobileCallback);
+    const next = encodeURIComponent(mobileCallback!);
     const oauthUrl = `${BACKEND}/api/authentication/${providerId}/login?next=${next}${affiliateParam}`;
-
-    await WebBrowser.openAuthSessionAsync(oauthUrl, mobileCallback);
-
-    // User dismissed the browser without completing auth
+    await WebBrowser.openAuthSessionAsync(oauthUrl, mobileCallback!);
     setIsLoading(null);
   }
 

@@ -34,7 +34,7 @@ async function handleDeepLink(url: string): Promise<boolean> {
 
     // Navigate to the main app after a short delay
     setTimeout(() => {
-      router.replace("/(tabs)/dashboard");
+      router.replace("/dashboard");
     }, 150);
 
     return true;

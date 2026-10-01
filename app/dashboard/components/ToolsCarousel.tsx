@@ -1,357 +1,325 @@
-import { useUser } from "@/src/context/user-context";
-import { useTranslations } from "@/src/hooks/useTranslations";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useRouter } from "expo-router";
-import {
-  Camera,
-  Clapperboard,
-  Images,
-  Layers,
-  Mic,
-  Music,
-  Scissors,
-  Speech,
-  Video,
-  Volume2,
-  Workflow,
-} from "lucide-react-native";
-import { useEffect, useState } from "react";
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Tool } from "../types/user";
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
+interface ToolCardProps {
+  tool: Tool;
+  onClick: (tool: Tool) => void;
+}
 
-const TOOLS: Tool[] = [
-  {
-    id: "1",
-    name: "Gerador de Vídeos",
-    description: "Crie vídeos com IA a partir de texto ou imagem",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/text-to-video.webp",
-    href: "/ai-tools/text-to-video",
-    category: "video",
-    isNew: false,
-    isPremium: false,
-    icon: Video,
-  },
-  {
-    id: "2",
-    name: "Gerador de Imagens",
-    description: "Gere imagens profissionais com os melhores modelos de IA",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/text-to-image.webp",
-    href: "/ai-tools/text-to-image",
-    category: "image",
-    isNew: false,
-    isPremium: false,
-    icon: Images,
-  },
-  {
-    id: "3",
-    name: "Smart Image",
-    description: "Gerador de imagens de produto com presets avançados",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/smart-image.webp",
-    href: "/ai-tools/smart-image-generator",
-    category: "image",
-    isNew: true,
-    isPremium: false,
-    icon: Camera,
-  },
-  {
-    id: "4",
-    name: "Smart Video",
-    description: "Gerador de vídeos de produto com presets sem prompt",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/smart-video.webp",
-    href: "/ai-tools/smart-video-generator",
-    category: "video",
-    isNew: true,
-    isPremium: true,
-    icon: Clapperboard,
-  },
-  {
-    id: "5",
-    name: "Fake Text",
-    description: "Crie conversas de texto fictícias para conteúdo",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/fake-text.webp",
-    href: "/ai-tools/fake-text",
-    category: "content",
-    isNew: false,
-    isPremium: false,
-    icon: Scissors,
-  },
-  {
-    id: "6",
-    name: "Canvas Studio",
-    description: "Editor visual com nós para criação de conteúdo",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/canvas.webp",
-    href: "/ai-tools/canvas-studio",
-    category: "editor",
-    isNew: false,
-    isPremium: false,
-    icon: Workflow,
-  },
-  {
-    id: "7",
-    name: "Gerador de Voz",
-    description: "Converta texto em voz natural com IA",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/voicegenerator.webp",
-    href: "/ai-tools/voicegenerator",
-    category: "audio",
-    isNew: false,
-    isPremium: false,
-    icon: Speech,
-  },
-  {
-    id: "8",
-    name: "Trend Music",
-    description: "Gere músicas originais com inteligência artificial",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/trend-music.webp",
-    href: "/ai-tools/trend-music",
-    category: "audio",
-    isNew: true,
-    isPremium: true,
-    icon: Music,
-  },
-  {
-    id: "9",
-    name: "Efeitos Sonoros",
-    description: "Crie efeitos sonoros únicos para seus vídeos",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/sound-effects.webp",
-    href: "/ai-tools/sound-effects",
-    category: "audio",
-    isNew: false,
-    isPremium: false,
-    icon: Volume2,
-  },
-  {
-    id: "10",
-    name: "Modificador de Voz",
-    description: "Altere e transforme vozes com IA",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/voice-changer.webp",
-    href: "/ai-tools/voice-changer",
-    category: "audio",
-    isNew: false,
-    isPremium: false,
-    icon: Mic,
-  },
-  {
-    id: "11",
-    name: "Variações com IA",
-    description: "Gere variações de imagens existentes",
-    image: "https://cdn-frontend.trendyuu.com/public/tools/variations.webp",
-    href: "/ai-tools/variations",
-    category: "image",
-    isNew: false,
-    isPremium: false,
-    icon: Layers,
-  },
+// ─── Waveform bars (audio tools) ─────────────────────────────────────────────
+// Mirrors the 32-bar waveform + play button + progress bar
+
+const WAVEFORM_HEIGHTS = [
+  12, 20, 16, 28, 24, 32, 18, 26, 22, 30, 14, 24, 28, 20, 32, 26, 18, 24, 30,
+  16, 28, 22, 32, 20, 26, 18, 24, 28, 16, 30, 22, 26,
 ];
 
-// ─── Single Tool Card ─────────────────────────────────────────────────────────
+function AudioPreview() {
+  return (
+    <View style={audioStyles.wrapper}>
+      {/* Play button — mirrors `w-12 h-12 bg-gradient-to-br from-pink-500 to-pink-600 rounded-full` */}
+      <View style={audioStyles.playBtn}>
+        {/* Triangle play icon */}
+        <View style={audioStyles.playTriangle} />
+      </View>
 
-function ToolCard({ tool, onPress }: { tool: Tool; onPress: () => void }) {
-  const isAudio = tool.category === "audio";
+      {/* Waveform + timeline */}
+      <View style={audioStyles.waveformGroup}>
+        {/* Bars */}
+        <View style={audioStyles.barsRow}>
+          {WAVEFORM_HEIGHTS.map((h, i) => {
+            const isActive = i < 12;
+            return (
+              <View
+                key={i}
+                style={[
+                  audioStyles.bar,
+                  { height: h },
+                  isActive ? audioStyles.barActive : audioStyles.barInactive,
+                ]}
+              />
+            );
+          })}
+        </View>
+
+        {/* Timeline — mirrors `flex justify-between items-center mt-2 text-xs text-zinc-400` */}
+        <View style={audioStyles.timeline}>
+          <Text style={audioStyles.timeText}>0:23</Text>
+          <View style={audioStyles.progressTrack}>
+            <View style={audioStyles.progressFill} />
+          </View>
+          <Text style={audioStyles.timeText}>1:15</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ─── ToolCard ─────────────────────────────────────────────────────────────────
+
+export function ToolCard({ tool, onClick }: ToolCardProps) {
+  const showHalo = tool.id === "5"; // Fake Text only
+  const isAudio = tool.category?.toLowerCase() === "audio";
 
   return (
     <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [card.root, pressed && card.rootPressed]}
+      onPress={() => onClick(tool)}
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      {/* Thumbnail */}
-      <View style={card.imageWrap}>
+      {/* Image area — mirrors `w-full h-40 relative mb-4 rounded-xl overflow-hidden` */}
+      <View style={[styles.imageWrapper, showHalo && styles.imageWrapperHalo]}>
+        {/* Halo glow (tool id === "5") — approximated with a blurred tinted View */}
+        {showHalo && <View style={styles.halo} pointerEvents="none" />}
+
         <Image
-          source={{ uri: tool.image }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
+          source={{ uri: tool.image || "/placeholder-image.jpg" }}
+          style={styles.toolImage}
+          resizeMode="contain"
         />
-        {/* Audio waveform overlay */}
-        {isAudio && (
-          <View style={card.waveformOverlay}>
-            <View style={card.waveform}>
-              {Array.from({ length: 16 }).map((_, i) => {
-                const heights = [
-                  12, 20, 16, 28, 18, 32, 22, 26, 14, 30, 24, 18, 28, 16, 22,
-                  20,
-                ];
-                return (
-                  <View
-                    key={i}
-                    style={[
-                      card.waveBar,
-                      {
-                        height: heights[i],
-                        backgroundColor:
-                          i < 6 ? "#ec4899" : "rgba(255,255,255,0.2)",
-                      },
-                    ]}
-                  />
-                );
-              })}
-            </View>
-          </View>
-        )}
-        {/* Badges */}
-        <View style={card.badgeRow}>
+      </View>
+
+      {/* Audio preview — mirrors the waveform block for audio category */}
+      {isAudio && <AudioPreview />}
+
+      {/* Text content — mirrors `flex-grow` block */}
+      <View style={styles.textGroup}>
+        <Text style={styles.name}>{tool.name}</Text>
+        <Text style={styles.description} numberOfLines={3}>
+          {tool.description}
+        </Text>
+      </View>
+
+      {/* Footer — mirrors `flex justify-between items-center mt-4 pt-4 border-t border-zinc-700` */}
+      <View style={styles.footer}>
+        <View style={styles.badges}>
           {tool.isNew && (
-            <View style={card.badgeNew}>
-              <Text style={card.badgeText}>New</Text>
+            <View style={[styles.badge, styles.badgeNew]}>
+              <Text style={[styles.badgeText, styles.badgeTextNew]}>New</Text>
             </View>
           )}
           {tool.isPremium && (
-            <View style={card.badgePremium}>
-              <Text style={card.badgeText}>Premium</Text>
+            <View style={[styles.badge, styles.badgePremium]}>
+              <Text style={[styles.badgeText, styles.badgeTextPremium]}>
+                Premium
+              </Text>
             </View>
           )}
         </View>
-      </View>
 
-      {/* Info */}
-      <View style={card.info}>
-        <Text style={card.name} numberOfLines={1}>
-          {tool.name}
-        </Text>
-        <Text style={card.desc} numberOfLines={2}>
-          {tool.description}
-        </Text>
-        <View style={card.categoryChip}>
-          <Text style={card.categoryText}>{tool.category}</Text>
-        </View>
+        {/* Category chip — mirrors `text-xs text-zinc-500 capitalize bg-zinc-800 px-2 py-1 rounded` */}
+        {tool.category && (
+          <View style={styles.categoryChip}>
+            <Text style={styles.categoryText}>{tool.category}</Text>
+          </View>
+        )}
       </View>
     </Pressable>
   );
 }
 
-const card = StyleSheet.create({
-  root: {
-    width: 160,
-    backgroundColor: "#09090b",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#27272a",
-    overflow: "hidden",
-  },
-  rootPressed: { opacity: 0.8, borderColor: "rgba(236,72,153,0.3)" },
-  imageWrap: { width: "100%", height: 120, backgroundColor: "#18181b" },
-  waveformOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  waveform: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: 2,
-    height: 32,
-  },
-  waveBar: { width: 3, borderRadius: 2 },
-  badgeRow: {
-    position: "absolute",
-    top: 8,
-    left: 8,
-    flexDirection: "row",
-    gap: 4,
-  },
-  badgeNew: {
-    backgroundColor: "rgba(236,72,153,0.85)",
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  badgePremium: {
-    backgroundColor: "rgba(202,138,4,0.85)",
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  badgeText: { fontSize: 9, fontWeight: "700", color: "#fff" },
-  info: { padding: 12, gap: 4 },
-  name: { fontSize: 13, fontWeight: "700", color: "#fff" },
-  desc: { fontSize: 11, color: "#71717a", lineHeight: 16 },
-  categoryChip: {
-    alignSelf: "flex-start",
-    backgroundColor: "#27272a",
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginTop: 4,
-  },
-  categoryText: { fontSize: 10, color: "#71717a", textTransform: "capitalize" },
-});
-
-// ─── Carousel ─────────────────────────────────────────────────────────────────
-
-export function ToolsCarousel() {
-  const t = useTranslations("dashboard");
-  const { user, currentPlan } = useUser();
-  const router = useRouter();
-  const [recentToolIds, setRecentToolIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    AsyncStorage.getItem("recentTools").then((stored) => {
-      if (stored) setRecentToolIds(JSON.parse(stored));
-    });
-  }, []);
-
-  async function handleToolPress(tool: Tool) {
-    // Track recently used
-    const updated = [
-      tool.id,
-      ...recentToolIds.filter((id) => id !== tool.id),
-    ].slice(0, 5);
-    setRecentToolIds(updated);
-    await AsyncStorage.setItem("recentTools", JSON.stringify(updated));
-    router.push(tool.href as any);
-  }
-
-  // Sort: recent first, then rest
-  const sortedTools = [
-    ...recentToolIds
-      .map((id) => TOOLS.find((t) => t.id === id))
-      .filter(Boolean),
-    ...TOOLS.filter((t) => !recentToolIds.includes(t.id)),
-  ] as Tool[];
-
-  return (
-    <View style={styles.root}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t("toolsSection") ?? "Ferramentas"}</Text>
-        <Pressable onPress={() => router.push("/ai-tools/text-to-video")}>
-          <Text style={styles.seeAll}>Ver todas →</Text>
-        </Pressable>
-      </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
-        {sortedTools.map((tool) => (
-          <ToolCard
-            key={tool.id}
-            tool={tool}
-            onPress={() => handleToolPress(tool)}
-          />
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { paddingTop: 24 },
-  header: {
+  // Card — mirrors `bg-zinc-900/50 border-zinc-800 hover:border-pink-500/30 … h-full`
+  card: {
+    backgroundColor: "rgba(24,24,27,0.5)",
+    borderWidth: 1,
+    borderColor: "#27272a",
+    borderRadius: 12,
+    padding: 24,
+    flex: 1,
+  },
+  cardPressed: {
+    borderColor: "rgba(236,72,153,0.3)",
+    transform: [{ scale: 0.98 }],
+  },
+
+  // Image wrapper — mirrors `w-full h-40 relative mb-4 rounded-xl overflow-hidden`
+  imageWrapper: {
+    width: "100%",
+    height: 160,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  imageWrapperHalo: {
+    overflow: "visible", // mirrors `overflow-visible` for showHalo
+  },
+  halo: {
+    position: "absolute",
+    width: "220%",
+    height: "220%",
+    borderRadius: 9999,
+    backgroundColor: "rgba(0,0,0,0.1)",
+    // RN doesn't support CSS blur; shadowRadius approximates the glow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.28,
+    shadowRadius: 28,
+  },
+  toolImage: {
+    width: "100%",
+    height: "100%",
+    padding: 16,
+  },
+
+  // Text group — mirrors `flex-grow`
+  textGroup: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  name: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 8,
+  },
+  description: {
+    fontSize: 14,
+    color: "#a1a1aa",
+    lineHeight: 20,
+  },
+
+  // Footer — mirrors `flex justify-between items-center mt-4 pt-4 border-t border-zinc-700`
+  footer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    marginBottom: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#3f3f46",
   },
-  title: { fontSize: 16, fontWeight: "600", color: "#fff" },
-  seeAll: { fontSize: 13, color: "#ec4899" },
-  scroll: { paddingHorizontal: 16, gap: 10, paddingBottom: 4 },
+  badges: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  badge: {
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+  },
+  // New badge — mirrors `bg-pink-500/20 text-pink-400 border-pink-500/30`
+  badgeNew: {
+    backgroundColor: "rgba(236,72,153,0.2)",
+    borderColor: "rgba(236,72,153,0.3)",
+  },
+  badgeTextNew: {
+    color: "#f472b6",
+  },
+  // Premium badge — mirrors `bg-yellow-500/20 text-yellow-400 border-yellow-500/30`
+  badgePremium: {
+    backgroundColor: "rgba(234,179,8,0.2)",
+    borderColor: "rgba(234,179,8,0.3)",
+  },
+  badgeTextPremium: {
+    color: "#facc15",
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  // Category chip — mirrors `text-xs text-zinc-500 capitalize bg-zinc-800 px-2 py-1 rounded`
+  categoryChip: {
+    backgroundColor: "#27272a",
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  categoryText: {
+    fontSize: 11,
+    color: "#71717a",
+    textTransform: "capitalize",
+  },
+});
+
+const audioStyles = StyleSheet.create({
+  // Mirrors `w-full mt-4 p-3 bg-gradient-to-r from-zinc-900/80 to-zinc-800/80 rounded-xl border border-zinc-700/50`
+  wrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "rgba(24,24,27,0.8)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(63,63,70,0.5)",
+  },
+  // Play button — mirrors `w-12 h-12 bg-gradient-to-br from-pink-500 to-pink-600 rounded-full`
+  playBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 99,
+    backgroundColor: "#ec4899",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  // Triangle play icon — mirrors `border-l-[14px] border-l-white border-t-[8px] border-b-[8px]`
+  playTriangle: {
+    width: 0,
+    height: 0,
+    marginLeft: 3,
+    borderLeftWidth: 14,
+    borderLeftColor: "#fff",
+    borderTopWidth: 8,
+    borderTopColor: "transparent",
+    borderBottomWidth: 8,
+    borderBottomColor: "transparent",
+  },
+  waveformGroup: {
+    flex: 1,
+  },
+  // Bars row — mirrors `flex items-end justify-center gap-1 h-8 px-2`
+  barsRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "center",
+    height: 32,
+    gap: 2,
+  },
+  bar: {
+    width: 3,
+    borderRadius: 99,
+  },
+  // Active (progressed) bars — mirrors `bg-gradient-to-t from-pink-600 to-pink-400`
+  barActive: {
+    backgroundColor: "#ec4899",
+  },
+  // Inactive bars — mirrors `bg-zinc-600`
+  barInactive: {
+    backgroundColor: "#52525b",
+  },
+  // Timeline row — mirrors `flex justify-between items-center mt-2 text-xs text-zinc-400`
+  timeline: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  timeText: {
+    fontSize: 11,
+    color: "#a1a1aa",
+  },
+  // Progress track — mirrors `flex-1 mx-3 h-1 bg-zinc-700 rounded-full overflow-hidden`
+  progressTrack: {
+    flex: 1,
+    height: 4,
+    backgroundColor: "#3f3f46",
+    borderRadius: 99,
+    overflow: "hidden",
+    marginHorizontal: 12,
+  },
+  // Progress fill — mirrors `h-full w-1/3 bg-gradient-to-r from-pink-500 to-pink-400`
+  progressFill: {
+    height: "100%",
+    width: "33%",
+    backgroundColor: "#ec4899",
+    borderRadius: 99,
+  },
 });

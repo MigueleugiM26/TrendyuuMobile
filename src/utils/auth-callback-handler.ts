@@ -3,9 +3,6 @@ import { router } from "expo-router";
 import { Linking } from "react-native";
 import { authEvents } from "./auth-events";
 
-// Optional: wire up PostHog if you want the same analytics events
-// import { usePostHog } from "posthog-react-native";  ← use inside a component instead
-
 const CALLBACK_PATH = "auth/callback";
 
 /**

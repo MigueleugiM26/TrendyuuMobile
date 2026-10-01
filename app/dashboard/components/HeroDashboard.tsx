@@ -1,10 +1,11 @@
-import { useUser } from "@/src/context/user-context";
-import { useTranslations } from "@/src/hooks/useTranslations";
+import { ASPECT_RATIO_OPTIONS_IMAGE } from "@/src/constants/aspect-ratio-options";
+import { Translator, useTranslations } from "@/src/hooks/useTranslations";
 import {
   AI_IMAGE_MODELS,
   AI_QUALITY_MODELS,
   AI_VIDEO_MODELS,
   AIImageModelConfig,
+  AIModelPlan,
   AIVideoModelConfig,
   AspectRatioImageAI,
   AspectRatioVideoAI,
@@ -14,69 +15,76 @@ import {
   QualityLevel,
   QualityVideoAI,
 } from "@/src/types/aiModels";
-import type { UserPlan } from "@/src/types/user";
+import { UserPlan } from "@/src/types/user";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
+import { Check, Lock, X } from "lucide-react-native";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowUp,
-  Check,
-  ChevronDown,
-  Clock,
-  Image as ImageIcon,
-  Lock,
-  RectangleHorizontal,
-  RectangleVertical,
-  Shuffle,
-  Square,
-  Video,
-  X,
-} from "lucide-react-native";
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Animated,
   Image,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const BACKEND = process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK;
-const FAVORITE_IMAGE_MODEL_KEY = "favorite-image-model";
-const FAVORITE_VIDEO_MODEL_KEY = "favorite-video-model";
+interface AIImageModel {
+  id: string;
+  name: string;
+  logo: string;
+  locked?: boolean;
+  hasQuality?: boolean;
+  maxImages?: number;
+  plan: AIModelPlan;
+  status: string;
+  baseCredits: number;
+}
 
-const ASPECT_RATIO_OPTIONS_VIDEO: {
-  value: AspectRatioVideoAI;
-  label: string;
-  Icon: typeof RectangleHorizontal;
-}[] = [
-  { value: "16:9", label: "16:9", Icon: RectangleHorizontal },
-  { value: "9:16", label: "9:16", Icon: RectangleVertical },
-  { value: "1:1", label: "1:1", Icon: Square },
-];
+interface AIVideoModel {
+  id: string;
+  name: string;
+  logo: string;
+  locked?: boolean;
+  hasQuality?: boolean;
+  maxImages?: number;
+  duration: AIVideoModelConfig["duration"];
+  supportsAudio: boolean;
+  plan: AIModelPlan;
+  status: string;
+  baseCredits: number;
+}
 
-const ASPECT_RATIO_OPTIONS_IMAGE: {
-  value: AspectRatioImageAI;
-  label: string;
-  Icon: typeof RectangleHorizontal;
-}[] = [
-  { value: "16:9", label: "16:9", Icon: RectangleHorizontal },
-  { value: "9:16", label: "9:16", Icon: RectangleVertical },
-  { value: "1:1", label: "1:1", Icon: Square },
-  { value: "4:3", label: "4:3", Icon: RectangleHorizontal },
-  { value: "3:4", label: "3:4", Icon: RectangleVertical },
-];
+interface PickedImage {
+  uri: string;
+  name: string;
+  type: string;
+  base64?: string;
+}
 
-// ─── Plan helpers ─────────────────────────────────────────────────────────────
+interface HeroDashboardProps {
+  user?: { id?: string; plan?: string } | null;
+  userPlan: UserPlan;
+  userCredits?: number;
+  formatTime: (s: number) => string;
+  formatStorage: (mb: number) => string;
+  t: Translator;
+  mode?: "image" | "video";
+  onModeChange?: (mode: "image" | "video") => void;
+  isPlanUpgradeRequired?: boolean;
+  hasGoogleDrive?: boolean;
+  onUpgradeRequired?: () => void;
+  onImportFromDrive?: () => void;
+}
 
-const PLAN_HIERARCHY: Record<string, number> = {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const PLAN_HIERARCHY: Record<UserPlan, number> = {
   free: 0,
   essential: 1,
   creator: 2,
@@ -88,7 +96,7 @@ function isImageModelLocked(
   userPlan: UserPlan,
 ): boolean {
   if (model.status === "blocked") return true;
-  return (PLAN_HIERARCHY[userPlan] ?? 0) < (PLAN_HIERARCHY[model.plan] ?? 0);
+  return PLAN_HIERARCHY[userPlan] < PLAN_HIERARCHY[model.plan as UserPlan];
 }
 
 function isVideoModelLocked(
@@ -96,23 +104,20 @@ function isVideoModelLocked(
   userPlan: UserPlan,
 ): boolean {
   if (model.status === "blocked") return true;
-  return (PLAN_HIERARCHY[userPlan] ?? 0) < (PLAN_HIERARCHY[model.plan] ?? 0);
+  return PLAN_HIERARCHY[userPlan] < PLAN_HIERARCHY[model.plan as UserPlan];
 }
 
-function getPlanBadgeColor(plan: string): string {
-  switch (plan) {
-    case "essential":
-      return "#ca8a04";
-    case "creator":
-      return "#16a34a";
-    case "agency":
-      return "#ec4899";
-    default:
-      return "#52525b";
-  }
+function doesImageModelSupportReference(modelId: string): boolean {
+  return AI_IMAGE_MODELS[modelId]?.supportsReferenceImage ?? false;
 }
 
-// ─── Credit helpers ───────────────────────────────────────────────────────────
+function getVisibleImageModels(userPlan: UserPlan): AIImageModelConfig[] {
+  return Object.values(AI_IMAGE_MODELS).filter((m) => m.status !== "blocked");
+}
+
+function getVisibleVideoModels(userPlan: UserPlan): AIVideoModelConfig[] {
+  return Object.values(AI_VIDEO_MODELS).filter((m) => m.status !== "blocked");
+}
 
 function calculateImageCredits(
   modelId: string,
@@ -126,14 +131,14 @@ function calculateImageCredits(
     return (model.baseCredits + model.perExtraReference * numRefs) * qty;
   }
   const qualityMap = AI_QUALITY_MODELS[modelId];
-  const bonus = qualityMap ? (qualityMap[quality] ?? 0) : 0;
-  return (model.baseCredits + bonus) * qty;
+  const qualityBonus = qualityMap ? (qualityMap[quality] ?? 0) : 0;
+  return (model.baseCredits + qualityBonus) * qty;
 }
 
 function calculateVideoCredits(
   modelId: string,
   duration: number,
-  numImages: number,
+  images: PickedImage[],
   hasAudio: boolean,
   userPlan: UserPlan,
 ): number {
@@ -141,907 +146,1129 @@ function calculateVideoCredits(
   if (!model) return 0;
   let credits = model.baseCredits;
   if (model.duration.type === "slider" && model.duration.min) {
-    const eff =
+    const effectiveDuration =
       userPlan === "free" && model.freeLimitations?.forceDuration
         ? model.freeLimitations.forceDuration
         : duration;
-    credits = model.baseCredits * eff;
-  } else if (model.duration.type === "selection" && model.pricingMap) {
-    credits = model.pricingMap[duration] ?? model.baseCredits;
+    credits = model.baseCredits * effectiveDuration;
+  } else if (model.duration.type === "selection" && model.duration.options) {
+    if (model.pricingMap)
+      credits = model.pricingMap[duration] ?? model.baseCredits;
+    else if (model.id === "kling-2.5-turbo")
+      credits = duration === 10 ? 3200 : 1600;
+    else if (model.id === "wan-2.6") credits = model.baseCredits * duration;
   }
-  if (numImages > 0) credits += numImages * (model.images.costPerImage || 0);
+  if (images.length > 0)
+    credits += images.length * (model.images.costPerImage || 0);
   if (hasAudio && model.audio.accepts) credits += model.audio.costPerAudio || 0;
   return Math.round(credits);
 }
 
-// ─── Model Picker Sheet ───────────────────────────────────────────────────────
+function getPlanBadgeColor(plan: AIModelPlan): string {
+  switch (plan) {
+    case "free":
+      return "#52525b";
+    case "essential":
+      return "#92400e";
+    case "creator":
+      return "#166534";
+    case "agency":
+      return "#ec4899";
+    default:
+      return "#52525b";
+  }
+}
 
-function ModelPickerSheet({
-  visible,
+const ASPECT_RATIO_OPTIONS_VIDEO: {
+  value: AspectRatioVideoAI;
+  label: string;
+  shortLabel: string;
+}[] = [
+  { value: "16:9", label: "widescreenLabel", shortLabel: "widescreen" },
+  { value: "9:16", label: "storyLabel", shortLabel: "story" },
+  { value: "1:1", label: "squareLabel", shortLabel: "square" },
+];
+
+// ─── ModelDropdown ────────────────────────────────────────────────────────────
+
+function ModelDropdown({
+  isOpen,
   onClose,
-  mode,
-  selectedId,
-  onSelect,
-  userPlan,
+  selectedModelId,
+  onSelectModel,
+  models,
+  isImageMode,
+  t,
+  getModelDescription,
 }: {
-  visible: boolean;
+  isOpen: boolean;
   onClose: () => void;
-  mode: "image" | "video";
-  selectedId: string;
-  onSelect: (id: string) => void;
-  userPlan: UserPlan;
+  selectedModelId: string;
+  onSelectModel: (id: string) => void;
+  models: (AIImageModel | AIVideoModel)[];
+  isImageMode: boolean;
+  t: Translator;
+  getModelDescription: (id: string) => string;
 }) {
-  const t = useTranslations("dashboard.HeroDashboard");
-  const slideAnim = useRef(new Animated.Value(600)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        bounciness: 0,
-        speed: 20,
-      }).start();
-    } else {
-      Animated.timing(slideAnim, {
-        toValue: 600,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [visible]);
-
-  const models =
-    mode === "image"
-      ? Object.values(AI_IMAGE_MODELS).filter((m) => m.status !== "blocked")
-      : Object.values(AI_VIDEO_MODELS).filter((m) => m.status !== "blocked");
-
   return (
     <Modal
-      visible={visible}
+      visible={isOpen}
       transparent
-      animationType="none"
+      animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable style={pickerStyles.backdrop} onPress={onClose} />
-      <Animated.View
-        style={[pickerStyles.panel, { transform: [{ translateY: slideAnim }] }]}
-      >
-        <View style={pickerStyles.handle} />
-        <Text style={pickerStyles.title}>
-          {mode === "image" ? t("selectImageModel") : t("selectVideoModel")}
-        </Text>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          style={{ maxHeight: 480 }}
-        >
-          {models.map((model) => {
-            const locked =
-              mode === "image"
-                ? isImageModelLocked(model as AIImageModelConfig, userPlan)
-                : isVideoModelLocked(model as AIVideoModelConfig, userPlan);
-            const isSelected = selectedId === model.id;
-            const logoUrl =
-              mode === "image"
+      <Pressable style={dropdownStyles.backdrop} onPress={onClose}>
+        <Pressable style={dropdownStyles.panel} onPress={() => {}}>
+          {/* Header */}
+          <View style={dropdownStyles.header}>
+            <View>
+              <Text style={dropdownStyles.headerTitle}>
+                {isImageMode ? t("selectImageModel") : t("selectVideoModel")}
+              </Text>
+              <Text style={dropdownStyles.headerSubtitle}>
+                {t("chooseBestModel")}
+              </Text>
+            </View>
+            <Pressable onPress={onClose} style={dropdownStyles.closeBtn}>
+              <X size={16} color="#a1a1aa" />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            style={dropdownStyles.list}
+            showsVerticalScrollIndicator={false}
+          >
+            {models.map((model) => {
+              const locked = model.locked || false;
+              const blocked = model.status === "blocked";
+              const isSelected = selectedModelId === model.id;
+              const logo = isImageMode
                 ? getAIImageModelLogo(model.id)
                 : getAIVideoModelLogo(model.id);
 
-            return (
-              <Pressable
-                key={model.id}
-                onPress={() => {
-                  if (!locked) {
-                    onSelect(model.id);
-                    onClose();
-                  }
-                }}
-                style={({ pressed }) => [
-                  pickerStyles.item,
-                  isSelected && pickerStyles.itemSelected,
-                  pressed && !locked && pickerStyles.itemPressed,
-                  locked && pickerStyles.itemLocked,
-                ]}
-              >
-                <View style={pickerStyles.logo}>
-                  <Image
-                    source={{ uri: logoUrl }}
-                    style={{ width: 28, height: 28 }}
-                    resizeMode="contain"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={pickerStyles.nameRow}>
-                    <Text style={pickerStyles.modelName}>{model.name}</Text>
-                    {locked && <Lock size={12} color="#eab308" />}
-                    <View
-                      style={[
-                        pickerStyles.planBadge,
-                        { backgroundColor: getPlanBadgeColor(model.plan) },
-                      ]}
-                    >
-                      <Text style={pickerStyles.planBadgeText}>
-                        {model.plan}
-                      </Text>
-                    </View>
+              return (
+                <Pressable
+                  key={model.id}
+                  onPress={() => {
+                    if (!blocked) {
+                      onSelectModel(model.id);
+                      onClose();
+                    }
+                  }}
+                  disabled={blocked}
+                  style={[
+                    dropdownStyles.modelRow,
+                    isSelected && dropdownStyles.modelRowSelected,
+                    blocked && { opacity: 0.5 },
+                  ]}
+                >
+                  <View style={dropdownStyles.modelLogoBox}>
+                    <Image
+                      source={{ uri: logo }}
+                      style={dropdownStyles.modelLogo}
+                      resizeMode="contain"
+                    />
                   </View>
-                  <Text style={pickerStyles.credits}>
-                    {model.baseCredits} {t("credits")}
-                  </Text>
-                </View>
-                {isSelected && <Check size={16} color="#ec4899" />}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </Animated.View>
+                  <View style={dropdownStyles.modelInfo}>
+                    <View style={dropdownStyles.modelNameRow}>
+                      <Text style={dropdownStyles.modelName} numberOfLines={1}>
+                        {model.name}
+                      </Text>
+                      {blocked && (
+                        <View
+                          style={[
+                            dropdownStyles.badge,
+                            { backgroundColor: "rgba(234,179,8,0.2)" },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              dropdownStyles.badgeText,
+                              { color: "#facc15" },
+                            ]}
+                          >
+                            {t("comingSoon")}
+                          </Text>
+                        </View>
+                      )}
+                      {locked && !blocked && <Lock size={12} color="#eab308" />}
+                      {model.plan && (
+                        <View
+                          style={[
+                            dropdownStyles.badge,
+                            { backgroundColor: getPlanBadgeColor(model.plan) },
+                          ]}
+                        >
+                          <Text style={dropdownStyles.badgeText}>
+                            {model.plan}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={dropdownStyles.modelDesc} numberOfLines={1}>
+                      {getModelDescription(model.id)}
+                    </Text>
+                    <Text style={dropdownStyles.modelCredits}>
+                      {model.baseCredits} {t("credits")}
+                    </Text>
+                  </View>
+                  {isSelected && <Check size={16} color="#f472b6" />}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
 
-const pickerStyles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  panel: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#09090b",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    borderColor: "#27272a",
-    padding: 16,
-    paddingBottom: 40,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: "#3f3f46",
-    borderRadius: 2,
-    alignSelf: "center",
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#fff",
-    textAlign: "center",
-    marginBottom: 12,
-  },
-  item: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  itemSelected: {
-    backgroundColor: "rgba(236,72,153,0.08)",
-    borderColor: "rgba(236,72,153,0.25)",
-  },
-  itemPressed: { backgroundColor: "#18181b" },
-  itemLocked: { opacity: 0.5 },
-  logo: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: "#18181b",
-    borderWidth: 1,
-    borderColor: "#27272a",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    flexWrap: "wrap",
-  },
-  modelName: { fontSize: 13, fontWeight: "500", color: "#e4e4e7" },
-  credits: { fontSize: 11, color: "#ec4899", marginTop: 2 },
-  planBadge: { borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 },
-  planBadgeText: { fontSize: 9, fontWeight: "700", color: "#fff" },
-});
+// ─── HeroDashboard ────────────────────────────────────────────────────────────
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-export function HeroDashboard() {
-  const t = useTranslations("dashboard.HeroDashboard");
-  const { user, currentPlan, userCredits } = useUser();
+export function HeroDashboard({
+  user,
+  userPlan = "free",
+  userCredits = 0,
+  isPlanUpgradeRequired = false,
+  hasGoogleDrive = false,
+  onUpgradeRequired,
+  onImportFromDrive,
+  mode: controlledMode,
+  onModeChange,
+}: HeroDashboardProps) {
   const router = useRouter();
-  const userPlan = (currentPlan?.toLowerCase() ?? "free") as UserPlan;
+  const t = useTranslations("dashboard.HeroDashboard");
 
-  // ── Mode ──────────────────────────────────────────────────────────────────
-  const [mode, setMode] = useState<"image" | "video">("image");
+  const getModelDescription = (modelId: string): string => {
+    const key = `modelDescriptions.${modelId.replace(/[.-]/g, "")}`;
+    const desc = t(key);
+    if (desc === key)
+      return t(`modelPicker.modelDescriptions.${modelId.replace(/[.-]/g, "")}`);
+    return desc;
+  };
+
+  // ── Mode ─────────────────────────────────────────────────────────────────
+  const [internalMode, setInternalMode] = useState<"image" | "video">("image");
+  const mode = controlledMode ?? internalMode;
+  const setMode = (m: "image" | "video") => {
+    controlledMode !== undefined ? onModeChange?.(m) : setInternalMode(m);
+  };
+
+  // ── State ─────────────────────────────────────────────────────────────────
   const [prompt, setPrompt] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [isGenerating] = useState(false);
+  const [audioFile, setAudioFile] = useState<{
+    uri: string;
+    name: string;
+  } | null>(null);
 
   // ── Models ────────────────────────────────────────────────────────────────
-  const defaultImageModelId = useMemo(() => {
+  const availableImageModels = useMemo<AIImageModel[]>(
+    () =>
+      getVisibleImageModels(userPlan).map((m) => ({
+        id: m.id,
+        name: m.name,
+        logo: getAIImageModelLogo(m.id),
+        locked: isImageModelLocked(m, userPlan),
+        hasQuality: !!AI_QUALITY_MODELS[m.id],
+        maxImages: m.max_generation_images || 1,
+        plan: m.plan,
+        status: m.status,
+        baseCredits: m.baseCredits,
+      })),
+    [userPlan],
+  );
+
+  const availableVideoModels = useMemo<AIVideoModel[]>(
+    () =>
+      getVisibleVideoModels(userPlan).map((m) => ({
+        id: m.id,
+        name: m.name,
+        logo: getAIVideoModelLogo(m.id),
+        locked: isVideoModelLocked(m, userPlan),
+        hasQuality: !!m.qualities?.length,
+        maxImages: m.images.max || 1,
+        duration: m.duration,
+        supportsAudio: m.audio.accepts,
+        plan: m.plan,
+        status: m.status,
+        baseCredits: m.baseCredits,
+      })),
+    [userPlan],
+  );
+
+  const getDefaultImageModel = () => {
     const unlocked = Object.values(AI_IMAGE_MODELS).filter(
       (m) => !isImageModelLocked(m, userPlan) && m.status !== "blocked",
     );
-    if (!unlocked.length) return Object.keys(AI_IMAGE_MODELS)[0];
+    if (!unlocked.length) return availableImageModels[0]?.id ?? "default";
     return unlocked.reduce((best, m) =>
       m.baseCredits > best.baseCredits ? m : best,
     ).id;
-  }, [userPlan]);
+  };
 
-  const defaultVideoModelId = useMemo(() => {
+  const getDefaultVideoModel = () => {
     const unlocked = Object.values(AI_VIDEO_MODELS).filter(
       (m) => !isVideoModelLocked(m, userPlan) && m.status !== "blocked",
     );
-    if (!unlocked.length) return Object.keys(AI_VIDEO_MODELS)[0];
+    if (!unlocked.length) return availableVideoModels[0]?.id ?? "";
     return unlocked.reduce((best, m) =>
       m.baseCredits > best.baseCredits ? m : best,
     ).id;
-  }, [userPlan]);
+  };
 
   const [selectedImageModelId, setSelectedImageModelId] =
-    useState(defaultImageModelId);
+    useState(getDefaultImageModel);
   const [selectedVideoModelId, setSelectedVideoModelId] =
-    useState(defaultVideoModelId);
-  const [showModelPicker, setShowModelPicker] = useState(false);
+    useState(getDefaultVideoModel);
 
-  const selectedModelId =
-    mode === "image" ? selectedImageModelId : selectedVideoModelId;
-  const selectedModel =
-    mode === "image"
-      ? AI_IMAGE_MODELS[selectedImageModelId]
-      : AI_VIDEO_MODELS[selectedVideoModelId];
-  const selectedLogoUrl =
-    mode === "image"
-      ? getAIImageModelLogo(selectedImageModelId)
-      : getAIVideoModelLogo(selectedVideoModelId);
+  const FAVORITE_IMAGE_MODEL_KEY = "favorite-image-model";
+  const FAVORITE_VIDEO_MODEL_KEY = "favorite-video-model";
+  const BASE_URL = process.env.EXPO_PUBLIC_TRENDYUU_URL_BACK;
 
-  // ── Fetch saved favorites ─────────────────────────────────────────────────
-  useEffect(() => {
-    if (!user?.id) return;
-    async function fetchFavorites() {
+  const fetchFavoriteModel = async (
+    key: string,
+    defaultId: string,
+    validate: (id: string) => boolean,
+  ): Promise<string> => {
+    try {
+      const token = await AsyncStorage.getItem("accessToken");
+      if (!token) return defaultId;
+      const res = await fetch(
+        `${BASE_URL}/api/video/get-user-config/?key=${key}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) return defaultId;
+      const data = await res.json();
+      const savedId: string | undefined =
+        data?.value?.favorite_image_model ?? data?.value?.favorite_video_model;
+      if (!savedId || !validate(savedId)) return defaultId;
+      return savedId;
+    } catch {
+      return defaultId;
+    }
+  };
+
+  const saveFavoriteModel = async (
+    key: string,
+    valueKey: string,
+    modelId: string,
+  ) => {
+    try {
       const token = await AsyncStorage.getItem("accessToken");
       if (!token) return;
-      const headers = { Authorization: `Bearer ${token}` };
-      try {
-        const [imgRes, vidRes] = await Promise.all([
-          fetch(
-            `${BACKEND}/api/video/get-user-config/?key=${FAVORITE_IMAGE_MODEL_KEY}`,
-            { headers },
-          ),
-          fetch(
-            `${BACKEND}/api/video/get-user-config/?key=${FAVORITE_VIDEO_MODEL_KEY}`,
-            { headers },
-          ),
-        ]);
-        if (imgRes.ok) {
-          const d = await imgRes.json();
-          const id = d?.value?.favorite_image_model;
-          if (
-            id &&
-            AI_IMAGE_MODELS[id] &&
-            !isImageModelLocked(AI_IMAGE_MODELS[id], userPlan)
-          )
-            setSelectedImageModelId(id);
-        }
-        if (vidRes.ok) {
-          const d = await vidRes.json();
-          const id = d?.value?.favorite_video_model;
-          if (
-            id &&
-            AI_VIDEO_MODELS[id] &&
-            !isVideoModelLocked(AI_VIDEO_MODELS[id], userPlan)
-          )
-            setSelectedVideoModelId(id);
-        }
-      } catch {}
+      await fetch(`${BASE_URL}/api/video/save-user-config/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ key, value: { [valueKey]: modelId } }),
+      });
+    } catch (err) {
+      console.error("Failed to save favorite model:", err);
     }
-    fetchFavorites();
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetchFavoriteModel(FAVORITE_IMAGE_MODEL_KEY, selectedImageModelId, (id) => {
+      const m = AI_IMAGE_MODELS[id];
+      return !!m && m.status !== "blocked" && !isImageModelLocked(m, userPlan);
+    }).then(setSelectedImageModelId);
+    fetchFavoriteModel(FAVORITE_VIDEO_MODEL_KEY, selectedVideoModelId, (id) => {
+      const m = AI_VIDEO_MODELS[id];
+      return !!m && m.status !== "blocked" && !isVideoModelLocked(m, userPlan);
+    }).then(setSelectedVideoModelId);
   }, [user?.id]);
 
-  async function saveFavorite(modelId: string) {
-    const token = await AsyncStorage.getItem("accessToken");
-    if (!token) return;
-    const key =
-      mode === "image" ? FAVORITE_IMAGE_MODEL_KEY : FAVORITE_VIDEO_MODEL_KEY;
-    const valueKey =
-      mode === "image" ? "favorite_image_model" : "favorite_video_model";
-    fetch(`${BACKEND}/api/video/save-user-config/`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ key, value: { [valueKey]: modelId } }),
-    }).catch(() => {});
-  }
+  const selectedImageModel = useMemo(
+    () =>
+      availableImageModels.find((m) => m.id === selectedImageModelId) ??
+      availableImageModels[0],
+    [availableImageModels, selectedImageModelId],
+  );
+  const selectedVideoModel = useMemo(
+    () =>
+      availableVideoModels.find((m) => m.id === selectedVideoModelId) ??
+      availableVideoModels[0],
+    [availableVideoModels, selectedVideoModelId],
+  );
+  const selectedModel =
+    mode === "image" ? selectedImageModel : selectedVideoModel;
+  const selectedModelId =
+    mode === "image" ? selectedImageModelId : selectedVideoModelId;
 
-  function handleSelectModel(id: string) {
-    if (mode === "image") setSelectedImageModelId(id);
-    else setSelectedVideoModelId(id);
-    saveFavorite(id);
-  }
-
-  // ── Image quality ─────────────────────────────────────────────────────────
-  const [quality, setQuality] = useState<QualityLevel>("medium");
-  const [showQualityPicker, setShowQualityPicker] = useState(false);
-  const hasQuality =
-    mode === "image" && !!AI_QUALITY_MODELS[selectedImageModelId];
-
-  // ── Aspect ratio ──────────────────────────────────────────────────────────
-  const [aspectRatio, setAspectRatio] = useState<
-    AspectRatioImageAI | AspectRatioVideoAI
-  >("1:1");
-  const [showAspectPicker, setShowAspectPicker] = useState(false);
-
-  const availableAspectRatios = useMemo(() => {
-    const model =
-      mode === "image"
-        ? AI_IMAGE_MODELS[selectedImageModelId]
-        : AI_VIDEO_MODELS[selectedVideoModelId];
-    const supported = model?.aspectRatios ?? [];
-    const all =
-      mode === "image"
-        ? ASPECT_RATIO_OPTIONS_IMAGE
-        : ASPECT_RATIO_OPTIONS_VIDEO;
-    return all.filter((o) => supported.includes(o.value));
-  }, [mode, selectedImageModelId, selectedVideoModelId]);
-
-  useEffect(() => {
-    if (
-      availableAspectRatios.length &&
-      !availableAspectRatios.find((o) => o.value === aspectRatio)
-    ) {
-      setAspectRatio(availableAspectRatios[0].value);
+  const setSelectedModelId = (id: string) => {
+    if (mode === "image") {
+      setSelectedImageModelId(id);
+      saveFavoriteModel(FAVORITE_IMAGE_MODEL_KEY, "favorite_image_model", id);
+    } else {
+      setSelectedVideoModelId(id);
+      saveFavoriteModel(FAVORITE_VIDEO_MODEL_KEY, "favorite_video_model", id);
     }
-  }, [availableAspectRatios]);
+  };
 
-  const AspectIcon =
-    availableAspectRatios.find((o) => o.value === aspectRatio)?.Icon ?? Square;
-
-  // ── Num images ────────────────────────────────────────────────────────────
+  // ── Specific states ───────────────────────────────────────────────────────
+  const [selectedQualityId, setSelectedQualityId] =
+    useState<QualityLevel>("medium");
+  const [format, setFormat] = useState<AspectRatioImageAI | AspectRatioVideoAI>(
+    "1:1",
+  );
   const [numImages, setNumImages] = useState(1);
-  const maxImages =
-    AI_IMAGE_MODELS[selectedImageModelId]?.max_generation_images ?? 1;
-
-  // ── Reference images ──────────────────────────────────────────────────────
-  const supportsRef =
-    mode === "image" &&
-    !!AI_IMAGE_MODELS[selectedImageModelId]?.supportsReferenceImage;
-  const [refImages, setRefImages] = useState<string[]>([]); // local URIs
-
-  async function pickRefImage() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsMultipleSelection: true,
-      quality: 0.8,
-    });
-    if (!result.canceled) {
-      const uris = result.assets.map((a) => a.uri);
-      const maxRef =
-        AI_IMAGE_MODELS[selectedImageModelId]?.max_generation_images ?? 1;
-      setRefImages((prev) => [...prev, ...uris].slice(0, maxRef));
-    }
-  }
-
-  useEffect(() => {
-    if (!supportsRef) setRefImages([]);
-  }, [supportsRef]);
-
-  // ── Video controls ────────────────────────────────────────────────────────
-  const videoModel = AI_VIDEO_MODELS[selectedVideoModelId];
   const [duration, setDuration] = useState(5);
   const [videoQuality, setVideoQuality] = useState<QualityVideoAI>("720p");
   const [imageMode, setImageMode] = useState<ImageModeVideoAI>("reference");
   const [seed, setSeed] = useState("");
-  const [showDurationPicker, setShowDurationPicker] = useState(false);
-  const [showVideoQualityPicker, setShowVideoQualityPicker] = useState(false);
+
+  // ── Dropdown visibility ───────────────────────────────────────────────────
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const [showQualityDropdown, setShowQualityDropdown] = useState(false);
+  const [showAspectDropdown, setShowAspectDropdown] = useState(false);
+  const [showDurationDropdown, setShowDurationDropdown] = useState(false);
+  const [showCreditsPopup, setShowCreditsPopup] = useState(false);
+
+  // ── Reference image support ───────────────────────────────────────────────
+  const supportsReferenceImages = useMemo(
+    () =>
+      mode === "image"
+        ? doesImageModelSupportReference(selectedImageModelId)
+        : false,
+    [mode, selectedImageModelId],
+  );
+
+  useEffect(() => {
+    if (mode === "image" && !supportsReferenceImages) setImages([]);
+  }, [mode, supportsReferenceImages]);
+
+  // ── Sync aspect ratio when model changes ─────────────────────────────────
+  useEffect(() => {
+    const modelConfig =
+      mode === "image"
+        ? AI_IMAGE_MODELS[selectedImageModelId]
+        : AI_VIDEO_MODELS[selectedVideoModelId];
+    const available = modelConfig?.aspectRatios || [];
+    if (available.length > 0 && !available.includes(format))
+      setFormat(available[0]);
+  }, [selectedImageModelId, selectedVideoModelId, mode]);
 
   // ── Credits ───────────────────────────────────────────────────────────────
   const creditsCost = useMemo(() => {
     if (mode === "image")
       return calculateImageCredits(
         selectedImageModelId,
-        quality,
-        refImages.length,
+        selectedQualityId,
+        images.length,
         numImages,
       );
     return calculateVideoCredits(
       selectedVideoModelId,
       duration,
-      refImages.length,
-      false,
+      images,
+      !!audioFile,
       userPlan,
     );
   }, [
     mode,
     selectedImageModelId,
-    quality,
+    selectedQualityId,
     numImages,
-    refImages.length,
     selectedVideoModelId,
     duration,
+    images,
+    audioFile,
     userPlan,
   ]);
 
   const needsUpgrade = useMemo(() => {
-    if (mode === "image")
-      return isImageModelLocked(
-        AI_IMAGE_MODELS[selectedImageModelId],
-        userPlan,
+    if (isPlanUpgradeRequired) return true;
+    if (mode === "image") {
+      const m = Object.values(AI_IMAGE_MODELS).find(
+        (m) => m.id === selectedImageModelId,
       );
-    return isVideoModelLocked(AI_VIDEO_MODELS[selectedVideoModelId], userPlan);
-  }, [mode, selectedImageModelId, selectedVideoModelId, userPlan]);
-
-  // ── Submit ────────────────────────────────────────────────────────────────
-  async function handleSubmit() {
-    if (!prompt.trim() || isGenerating || needsUpgrade) return;
-    setIsGenerating(true);
-    try {
-      const config =
-        mode === "image"
-          ? {
-              mode: "image",
-              modelId: selectedImageModelId,
-              quality,
-              aspectRatio,
-              numImages,
-            }
-          : {
-              mode: "video",
-              modelId: selectedVideoModelId,
-              quality: videoQuality,
-              aspectRatio,
-              duration,
-              imageMode,
-              seed: seed || undefined,
-            };
-      await AsyncStorage.setItem("pendingToolPrompt", prompt.trim());
-      await AsyncStorage.setItem("pendingHeroConfig", JSON.stringify(config));
-      router.push(
-        mode === "image"
-          ? "/ai-tools/text-to-image"
-          : "/ai-tools/text-to-video",
-      );
-    } finally {
-      setIsGenerating(false);
+      return m ? isImageModelLocked(m, userPlan) : false;
     }
-  }
+    const m = Object.values(AI_VIDEO_MODELS).find(
+      (m) => m.id === selectedVideoModelId,
+    );
+    return m ? isVideoModelLocked(m, userPlan) : false;
+  }, [
+    mode,
+    selectedImageModelId,
+    selectedVideoModelId,
+    userPlan,
+    isPlanUpgradeRequired,
+  ]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleImagePick = async () => {
+    const max = selectedModel?.maxImages ?? 1;
+    if (images.length >= max) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      base64: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const newImage: PickedImage = {
+      uri: asset.uri,
+      name: asset.fileName ?? "image.jpg",
+      type: asset.mimeType ?? "image/jpeg",
+      base64: asset.base64 ?? undefined,
+    };
+    setImages((prev) => [...prev, newImage].slice(0, max));
+  };
+
+  const handleAudioPick = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "audio/*",
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets[0];
+      setAudioFile({
+        uri: file.uri,
+        name: file.name ?? "audio.mp3",
+      });
+    } catch (error) {
+      console.error("Error picking audio:", error);
+    }
+  };
+
+  const removeImage = (index: number) =>
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  const removeAudio = () => setAudioFile(null);
+  const randomizeSeed = () =>
+    setSeed(Math.floor(Math.random() * 999999999).toString());
+
+  const handleSubmit = async () => {
+    if (needsUpgrade) {
+      onUpgradeRequired?.();
+      return;
+    }
+    if (!prompt.trim() || isGenerating) return;
+
+    await AsyncStorage.setItem("pendingToolPrompt", prompt.trim());
+
+    if (mode === "image") {
+      await AsyncStorage.setItem(
+        "pendingHeroConfig",
+        JSON.stringify({
+          mode: "image",
+          modelId: selectedImageModelId,
+          quality: selectedQualityId,
+          aspectRatio: format,
+          numImages,
+          images: images.map((img) => ({
+            name: img.name,
+            type: img.type,
+            data: img.base64 ?? "",
+          })),
+        }),
+      );
+      router.push("/ai-tools/text-to-image" as any);
+    } else {
+      await AsyncStorage.setItem(
+        "pendingHeroConfig",
+        JSON.stringify({
+          mode: "video",
+          modelId: selectedVideoModelId,
+          quality: videoQuality,
+          aspectRatio: format,
+          duration,
+          imageMode,
+          seed: seed || undefined,
+          images: images.map((img) => ({
+            name: img.name,
+            type: img.type,
+            data: img.base64 ?? "",
+          })),
+        }),
+      );
+      router.push("/ai-tools/text-to-video" as any);
+    }
+  };
+
+  // ── Aspect ratio options for current model ────────────────────────────────
+  const allAspectOptions =
+    mode === "image" ? ASPECT_RATIO_OPTIONS_IMAGE : ASPECT_RATIO_OPTIONS_VIDEO;
+  const modelConfig =
+    mode === "image"
+      ? AI_IMAGE_MODELS[selectedImageModelId]
+      : AI_VIDEO_MODELS[selectedVideoModelId];
+  const availableRatios = modelConfig?.aspectRatios || [];
+  const aspectOptions = allAspectOptions.filter((o) =>
+    availableRatios.includes(o.value),
+  );
+  const selectedAspect =
+    aspectOptions.find((o) => o.value === format) ?? aspectOptions[0];
+
+  const videoModel = AI_VIDEO_MODELS[selectedVideoModelId];
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // NOTE: On web, the HeroDashboard is wrapped in `hidden sm:block` — it is
+  // intentionally NOT shown on mobile. On mobile (this app) we render it as a
+  // compact prompt box without the decorative hero title, matching the
+  // functional elements that are visible at the sm breakpoint on a small
+  // physical device when rotated, or on tablet.
+  // ─────────────────────────────────────────────────────────────────────────
+
   return (
     <View style={styles.root}>
-      {/* Mode toggle */}
-      <View style={styles.modeToggle}>
-        {(["image", "video"] as const).map((m) => (
-          <Pressable
-            key={m}
-            onPress={() => setMode(m)}
-            style={[styles.modeBtn, mode === m && styles.modeBtnActive]}
-          >
-            {m === "image" ? (
-              <ImageIcon size={14} color={mode === m ? "#fff" : "#71717a"} />
-            ) : (
-              <Video size={14} color={mode === m ? "#fff" : "#71717a"} />
-            )}
-            <Text
-              style={[
-                styles.modeBtnText,
-                mode === m && styles.modeBtnTextActive,
-              ]}
+      {/*
+      <View style={styles.modeToggleRow}>
+        <View style={styles.modeToggle}>
+          {(["image", "video"] as const).map((m) => (
+            <Pressable
+              key={m}
+              onPress={() => setMode(m)}
+              style={[styles.modeBtn, mode === m && styles.modeBtnActive]}
             >
-              {t(`${m}Mode`)}
-            </Text>
-          </Pressable>
-        ))}
+              {m === "image" ? (
+                <ImageIcon size={14} color={mode === m ? "#fff" : "#a1a1aa"} />
+              ) : (
+                <Video size={14} color={mode === m ? "#fff" : "#a1a1aa"} />
+              )}
+              <Text
+                style={[
+                  styles.modeBtnText,
+                  mode === m && styles.modeBtnTextActive,
+                ]}
+              >
+                {t(m === "image" ? "imageMode" : "videoMode")}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
-      {/* Main card */}
-      <View style={styles.card}>
-        {/* Top toolbar */}
-        <View style={styles.toolbar}>
-          {/* Model picker */}
-          <Pressable
-            onPress={() => setShowModelPicker(true)}
-            style={styles.toolbarChip}
-          >
-            <Image
-              source={{ uri: selectedLogoUrl }}
-              style={styles.modelLogo}
-              resizeMode="contain"
-            />
-            <Text style={styles.toolbarChipText} numberOfLines={1}>
-              {selectedModel?.name}
-            </Text>
-            <ChevronDown size={12} color="#71717a" />
-          </Pressable>
-
-          <View style={{ flex: 1 }} />
-
-          {/* Aspect ratio */}
-          {availableAspectRatios.length > 0 && (
+      <View style={styles.box}>
+        <View style={styles.controlsBar}>
+          {mode === "image" && supportsReferenceImages && (
             <Pressable
-              onPress={() => setShowAspectPicker(true)}
-              style={styles.toolbarChip}
+              onPress={handleImagePick}
+              disabled={images.length >= (selectedModel?.maxImages ?? 1)}
+              style={[
+                styles.iconBtn,
+                styles.iconBtnDashed,
+                images.length >= (selectedModel?.maxImages ?? 1) && {
+                  opacity: 0.4,
+                },
+              ]}
+              accessibilityLabel={t("addReferenceImage")}
             >
-              <AspectIcon size={13} color="#a1a1aa" />
-              <Text style={styles.toolbarChipText}>{aspectRatio}</Text>
-              <ChevronDown size={12} color="#71717a" />
+              <ImageIcon size={16} color="#71717a" />
             </Pressable>
           )}
 
-          {/* Quality (image only) */}
-          {hasQuality && (
-            <Pressable
-              onPress={() => setShowQualityPicker(true)}
-              style={styles.toolbarChip}
-            >
-              <Text style={styles.toolbarChipText}>{quality}</Text>
-              <ChevronDown size={12} color="#71717a" />
-            </Pressable>
-          )}
-
-          {/* Duration (video only, selection type) */}
-          {mode === "video" && videoModel?.duration.type === "selection" && (
-            <Pressable
-              onPress={() => setShowDurationPicker(true)}
-              style={styles.toolbarChip}
-            >
-              <Clock size={12} color="#a1a1aa" />
-              <Text style={styles.toolbarChipText}>{duration}s</Text>
-              <ChevronDown size={12} color="#71717a" />
-            </Pressable>
-          )}
-
-          {/* Video quality */}
-          {mode === "video" && videoModel?.qualities?.length && (
-            <Pressable
-              onPress={() => setShowVideoQualityPicker(true)}
-              style={styles.toolbarChip}
-            >
-              <Text style={styles.toolbarChipText}>{videoQuality}</Text>
-              <ChevronDown size={12} color="#71717a" />
-            </Pressable>
-          )}
-        </View>
-
-        {/* Duration slider (video only, slider type) */}
-        {mode === "video" &&
-          videoModel?.duration.type === "slider" &&
-          videoModel.duration.min && (
-            <View style={styles.sliderRow}>
-              <Text style={styles.sliderLabel}>
-                {t("duration")}: {duration}s
-              </Text>
+          {images.length > 0 && (
+            <View style={styles.previewsRow}>
+              {images.map((img, index) => (
+                <View key={index} style={styles.previewWrapper}>
+                  <Image
+                    source={{ uri: img.uri }}
+                    style={styles.previewImg}
+                    resizeMode="cover"
+                  />
+                  <Pressable
+                    onPress={() => removeImage(index)}
+                    style={styles.previewRemove}
+                  >
+                    <X size={10} color="#d4d4d8" />
+                  </Pressable>
+                </View>
+              ))}
             </View>
           )}
 
-        {/* Image mode selector (video only) */}
-        {mode === "video" && videoModel?.images.type === "mode-selector" && (
-          <View style={styles.imageModeRow}>
-            {(["reference", "first-last"] as ImageModeVideoAI[]).map((m) => (
-              <Pressable
-                key={m}
-                onPress={() => setImageMode(m)}
-                style={[
-                  styles.imageModeBtn,
-                  imageMode === m && styles.imageModeBtnActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.imageModeBtnText,
-                    imageMode === m && styles.imageModeBtnTextActive,
-                  ]}
-                >
-                  {t(m === "reference" ? "reference" : "firstLast")}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
+          <View style={{ flex: 1 }} />
 
-        {/* Seed (video only) */}
-        {mode === "video" && videoModel?.seed && (
-          <View style={styles.seedRow}>
-            <TextInput
-              value={seed}
-              onChangeText={setSeed}
-              placeholder={t("seedPlaceholder")}
-              placeholderTextColor="#52525b"
-              style={styles.seedInput}
-              keyboardType="numeric"
-            />
-            <Pressable
-              onPress={() =>
-                setSeed(Math.floor(Math.random() * 999999999).toString())
-              }
-              style={styles.seedBtn}
-            >
-              <Shuffle size={14} color="#a1a1aa" />
-            </Pressable>
-          </View>
-        )}
-
-        {/* Reference image previews */}
-        {supportsRef && refImages.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.refScroll}
+          <Pressable
+            onPress={() => setShowModelPicker(true)}
+            style={styles.modelTrigger}
           >
-            {refImages.map((uri, i) => (
-              <View key={i} style={styles.refImageWrap}>
-                <Image source={{ uri }} style={styles.refImage} />
+            {selectedModel?.locked && <Lock size={12} color="#71717a" />}
+            <View style={styles.modelLogoBox}>
+              <Image
+                source={{ uri: selectedModel?.logo ?? "" }}
+                style={styles.modelLogoImg}
+                resizeMode="contain"
+              />
+            </View>
+            <Text style={styles.modelTriggerText} numberOfLines={1}>
+              {selectedModel?.name}
+            </Text>
+            <ChevronDown size={12} color="#a1a1aa" />
+          </Pressable>
+
+          {mode === "image" && selectedModel?.hasQuality && (
+            <>
+              <Pressable
+                onPress={() => setShowQualityDropdown(true)}
+                style={styles.pillBtn}
+              >
+                <Text style={styles.pillBtnText}>{selectedQualityId}</Text>
+                <ChevronDown size={12} color="#a1a1aa" />
+              </Pressable>
+              <Modal
+                visible={showQualityDropdown}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowQualityDropdown(false)}
+              >
+                <Pressable
+                  style={styles.dropdownBackdrop}
+                  onPress={() => setShowQualityDropdown(false)}
+                >
+                  <View style={styles.dropdownCard}>
+                    <Text style={styles.dropdownLabel}>{t("quality")}</Text>
+                    {(["low", "medium", "high"] as QualityLevel[]).map((q) => (
+                      <Pressable
+                        key={q}
+                        onPress={() => {
+                          setSelectedQualityId(q);
+                          setShowQualityDropdown(false);
+                        }}
+                        style={[
+                          styles.dropdownItem,
+                          selectedQualityId === q && styles.dropdownItemActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.dropdownItemText,
+                            selectedQualityId === q &&
+                              styles.dropdownItemTextActive,
+                          ]}
+                        >
+                          {q}
+                        </Text>
+                        {selectedQualityId === q && (
+                          <Check size={12} color="#fff" />
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                </Pressable>
+              </Modal>
+            </>
+          )}
+
+          {aspectOptions.length > 0 && (
+            <>
+              <Pressable
+                onPress={() => setShowAspectDropdown(true)}
+                style={styles.pillBtn}
+              >
+                <Text style={styles.pillBtnText}>
+                  {selectedAspect?.shortLabel ?? format}
+                </Text>
+                <ChevronDown size={12} color="#a1a1aa" />
+              </Pressable>
+              <Modal
+                visible={showAspectDropdown}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowAspectDropdown(false)}
+              >
+                <Pressable
+                  style={styles.dropdownBackdrop}
+                  onPress={() => setShowAspectDropdown(false)}
+                >
+                  <View style={styles.dropdownCard}>
+                    {aspectOptions.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => {
+                          setFormat(option.value);
+                          setShowAspectDropdown(false);
+                        }}
+                        style={[
+                          styles.dropdownItem,
+                          styles.dropdownItemRow,
+                          format === option.value && styles.dropdownItemActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.dropdownItemText,
+                            format === option.value &&
+                              styles.dropdownItemTextActive,
+                          ]}
+                        >
+                          {option.label ?? option.shortLabel}
+                        </Text>
+                        <Text style={styles.dropdownItemMono}>
+                          {option.value}
+                        </Text>
+                        {format === option.value && (
+                          <Check size={12} color="#fff" />
+                        )}
+                      </Pressable>
+                    ))}
+                  </View>
+                </Pressable>
+              </Modal>
+            </>
+          )}
+
+          {mode === "video" && videoModel && (
+            <>
+              {videoModel.duration.type === "selection" &&
+                videoModel.duration.options && (
+                  <>
+                    <Pressable
+                      onPress={() => setShowDurationDropdown(true)}
+                      style={styles.pillBtn}
+                    >
+                      <Clock size={12} color="#a1a1aa" />
+                      <Text style={styles.pillBtnText}>{duration}s</Text>
+                      <ChevronDown size={12} color="#a1a1aa" />
+                    </Pressable>
+                    <Modal
+                      visible={showDurationDropdown}
+                      transparent
+                      animationType="fade"
+                      onRequestClose={() => setShowDurationDropdown(false)}
+                    >
+                      <Pressable
+                        style={styles.dropdownBackdrop}
+                        onPress={() => setShowDurationDropdown(false)}
+                      >
+                        <View style={styles.dropdownCard}>
+                          <Text style={styles.dropdownLabel}>
+                            {t("duration")}
+                          </Text>
+                          {videoModel.duration.options.map((dur) => (
+                            <Pressable
+                              key={dur}
+                              onPress={() => {
+                                setDuration(dur);
+                                setShowDurationDropdown(false);
+                              }}
+                              style={[
+                                styles.dropdownItem,
+                                styles.dropdownItemRow,
+                                duration === dur && styles.dropdownItemActive,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.dropdownItemText,
+                                  duration === dur &&
+                                    styles.dropdownItemTextActive,
+                                ]}
+                              >
+                                {dur}s
+                              </Text>
+                              {duration === dur && (
+                                <Check size={12} color="#fff" />
+                              )}
+                            </Pressable>
+                          ))}
+                        </View>
+                      </Pressable>
+                    </Modal>
+                  </>
+                )}
+
+              {videoModel.duration.type === "fixed" &&
+                videoModel.duration.value && (
+                  <Text style={styles.fixedDuration}>
+                    {videoModel.duration.value}s
+                  </Text>
+                )}
+
+              {videoModel.qualities && videoModel.qualities.length > 0 && (
+                <>
+                  <Pressable
+                    onPress={() => setShowQualityDropdown(true)}
+                    style={styles.pillBtn}
+                  >
+                    <Text style={styles.pillBtnText}>{videoQuality}</Text>
+                    <ChevronDown size={12} color="#a1a1aa" />
+                  </Pressable>
+                  <Modal
+                    visible={showQualityDropdown}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowQualityDropdown(false)}
+                  >
+                    <Pressable
+                      style={styles.dropdownBackdrop}
+                      onPress={() => setShowQualityDropdown(false)}
+                    >
+                      <View style={styles.dropdownCard}>
+                        <Text style={styles.dropdownLabel}>{t("quality")}</Text>
+                        {videoModel.qualities.map((q) => (
+                          <Pressable
+                            key={q}
+                            onPress={() => {
+                              setVideoQuality(q);
+                              setShowQualityDropdown(false);
+                            }}
+                            style={[
+                              styles.dropdownItem,
+                              styles.dropdownItemRow,
+                              videoQuality === q && styles.dropdownItemActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.dropdownItemText,
+                                videoQuality === q &&
+                                  styles.dropdownItemTextActive,
+                              ]}
+                            >
+                              {q}
+                            </Text>
+                            {videoQuality === q && (
+                              <Check size={12} color="#fff" />
+                            )}
+                          </Pressable>
+                        ))}
+                      </View>
+                    </Pressable>
+                  </Modal>
+                </>
+              )}
+
+              {videoModel.images.type === "mode-selector" && (
+                <View style={styles.imageModeRow}>
+                  {(["reference", "first-last"] as ImageModeVideoAI[]).map(
+                    (m) => (
+                      <Pressable
+                        key={m}
+                        onPress={() => setImageMode(m)}
+                        style={[
+                          styles.imageModeBtn,
+                          imageMode === m && styles.imageModeBtnActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.imageModeBtnText,
+                            imageMode === m && styles.imageModeBtnTextActive,
+                          ]}
+                        >
+                          {m === "reference" ? t("reference") : t("firstLast")}
+                        </Text>
+                      </Pressable>
+                    ),
+                  )}
+                </View>
+              )}
+
+              {videoModel.audio.accepts && (
+                <View style={styles.audioRow}>
+                  <Pressable
+                    onPress={handleAudioPick}
+                    disabled={!!audioFile}
+                    style={[styles.iconBtn, !!audioFile && { opacity: 0.4 }]}
+                  >
+                    <Music size={16} color="#71717a" />
+                  </Pressable>
+                  {audioFile && (
+                    <View style={styles.audioTag}>
+                      <Music size={12} color="#ec4899" />
+                      <Text style={styles.audioTagText} numberOfLines={1}>
+                        {audioFile.name}
+                      </Text>
+                      <Pressable onPress={removeAudio}>
+                        <X size={12} color="#a1a1aa" />
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              {videoModel.seed && (
+                <View style={styles.seedRow}>
+                  <TextInput
+                    value={seed}
+                    onChangeText={setSeed}
+                    placeholder={t("seedPlaceholder")}
+                    placeholderTextColor="#3f3f46"
+                    style={styles.seedInput}
+                    keyboardType="numeric"
+                  />
+                  <Pressable onPress={randomizeSeed} style={styles.seedBtn}>
+                    <Shuffle size={12} color="#71717a" />
+                  </Pressable>
+                </View>
+              )}
+            </>
+          )}
+
+          {mode === "image" && (selectedModel?.maxImages ?? 1) > 1 && (
+            <>
+              <View style={styles.dividerV} />
+              <View style={styles.qtyRow}>
+                <Pressable
+                  onPress={() => setNumImages((n) => Math.max(1, n - 1))}
+                  disabled={numImages <= 1}
+                  style={[styles.qtyBtn, numImages <= 1 && { opacity: 0.4 }]}
+                >
+                  <Text style={styles.qtyBtnText}>−</Text>
+                </Pressable>
+                <Text style={styles.qtyValue}>{numImages}</Text>
                 <Pressable
                   onPress={() =>
-                    setRefImages((p) => p.filter((_, idx) => idx !== i))
+                    setNumImages((n) =>
+                      Math.min(selectedModel?.maxImages ?? 1, n + 1),
+                    )
                   }
-                  style={styles.refImageRemove}
+                  disabled={numImages >= (selectedModel?.maxImages ?? 1)}
+                  style={[
+                    styles.qtyBtn,
+                    numImages >= (selectedModel?.maxImages ?? 1) && {
+                      opacity: 0.4,
+                    },
+                  ]}
                 >
-                  <X size={10} color="#fff" />
+                  <Text style={styles.qtyBtnText}>+</Text>
                 </Pressable>
               </View>
-            ))}
-          </ScrollView>
-        )}
+            </>
+          )}
+        </View>
 
-        {/* Prompt textarea */}
         <TextInput
           value={prompt}
           onChangeText={setPrompt}
           placeholder={
             mode === "image" ? t("describeImage") : t("describeVideo")
           }
-          placeholderTextColor="#52525b"
-          style={styles.textarea}
+          placeholderTextColor="#3f3f46"
           multiline
-          numberOfLines={3}
+          style={styles.promptInput}
+          blurOnSubmit={false}
         />
 
-        {/* Bottom bar */}
-        <View style={styles.bottomBar}>
-          {/* Ref image add button */}
-          {supportsRef && (
-            <Pressable
-              onPress={pickRefImage}
-              disabled={refImages.length >= maxImages}
-              style={styles.iconBtn}
-            >
-              <ImageIcon
-                size={16}
-                color={refImages.length >= maxImages ? "#3f3f46" : "#a1a1aa"}
-              />
-            </Pressable>
-          )}
-
-          {/* Num images counter */}
-          {mode === "image" && maxImages > 1 && (
-            <View style={styles.counter}>
-              <Pressable
-                onPress={() => setNumImages((n) => Math.max(1, n - 1))}
-                style={styles.counterBtn}
-              >
-                <Text style={styles.counterBtnText}>−</Text>
-              </Pressable>
-              <Text style={styles.counterValue}>{numImages}</Text>
-              <Pressable
-                onPress={() => setNumImages((n) => Math.min(maxImages, n + 1))}
-                style={styles.counterBtn}
-              >
-                <Text style={styles.counterBtnText}>+</Text>
-              </Pressable>
-            </View>
-          )}
-
-          <View style={{ flex: 1 }} />
-
-          {/* Credits display */}
-          <Text style={styles.credits}>
+        <View style={styles.footerRow}>
+          <Pressable
+            onPress={() => setShowCreditsPopup(true)}
+            style={styles.creditsBtn}
+          >
             <Text style={styles.creditsCost}>
-              {creditsCost.toLocaleString("pt-BR")}
+              {creditsCost.toLocaleString()}
             </Text>
-            {" / "}
+            <Text style={styles.creditsSep}>/</Text>
             <Text style={styles.creditsAvailable}>
-              {(userCredits ?? 0).toLocaleString("pt-BR")}
+              {userCredits.toLocaleString()}
             </Text>
-            {" cr"}
-          </Text>
+            <Text style={styles.creditsLabel}>{t("creditsLabel")}</Text>
+            <Info size={12} color="#52525b" />
+          </Pressable>
 
-          {/* Submit */}
           <Pressable
             onPress={handleSubmit}
             disabled={(!prompt.trim() && !needsUpgrade) || isGenerating}
-            style={({ pressed }) => [
+            style={[
               styles.submitBtn,
-              pressed && { opacity: 0.85 },
-              ((!prompt.trim() && !needsUpgrade) || isGenerating) &&
-                styles.submitBtnDisabled,
+              ((!prompt.trim() && !needsUpgrade) || isGenerating) && {
+                opacity: 0.4,
+              },
             ]}
           >
             {isGenerating ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : needsUpgrade ? (
-              <Lock size={16} color="#fff" />
+              <Lock size={14} color="#fff" />
             ) : (
-              <ArrowUp size={16} color="#fff" />
+              <ArrowUp size={14} color="#fff" />
             )}
           </Pressable>
         </View>
       </View>
+      */}
 
-      {/* ── Pickers ────────────────────────────────────────────────── */}
-      <ModelPickerSheet
-        visible={showModelPicker}
+      {/* Credits popup */}
+      <Modal
+        visible={showCreditsPopup}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreditsPopup(false)}
+      >
+        <Pressable
+          style={styles.dropdownBackdrop}
+          onPress={() => setShowCreditsPopup(false)}
+        >
+          <View style={styles.creditsPopup}>
+            <View style={styles.creditsPopupRow}>
+              <Text style={styles.creditsPopupMuted}>
+                {mode === "image" ? t("imageMode") : t("videoMode")}
+              </Text>
+            </View>
+            {mode === "image" &&
+              AI_IMAGE_MODELS[selectedImageModelId]?.perExtraReference !==
+                undefined &&
+              images.length > 0 &&
+              (() => {
+                const m = AI_IMAGE_MODELS[selectedImageModelId];
+                const refCost =
+                  m.perExtraReference! * images.length * numImages;
+                const baseCost = m.baseCredits * numImages;
+                return (
+                  <>
+                    <View style={styles.creditsPopupRow}>
+                      <Text style={styles.creditsPopupMuted}>Base</Text>
+                      <Text style={styles.creditsPopupVal}>{baseCost}</Text>
+                    </View>
+                    <View style={styles.creditsPopupRow}>
+                      <Text style={styles.creditsPopupMuted}>
+                        References (×{images.length})
+                      </Text>
+                      <Text
+                        style={[styles.creditsPopupVal, { color: "#f472b6" }]}
+                      >
+                        +{refCost}
+                      </Text>
+                    </View>
+                  </>
+                );
+              })()}
+            <View style={[styles.creditsPopupRow, styles.creditsPopupTotal]}>
+              <Text style={styles.creditsPopupTotalLabel}>{t("total")}:</Text>
+              <View style={{ flexDirection: "row", gap: 2 }}>
+                <Text
+                  style={{ color: "#ec4899", fontWeight: "600", fontSize: 12 }}
+                >
+                  {creditsCost.toLocaleString()}
+                </Text>
+                <Text style={{ color: "#a1a1aa", fontSize: 12 }}>/</Text>
+                <Text
+                  style={{ color: "#4ade80", fontWeight: "600", fontSize: 12 }}
+                >
+                  {userCredits.toLocaleString()}
+                </Text>
+                <Text style={{ color: "#a1a1aa", fontSize: 12 }}>
+                  {" "}
+                  {t("creditsLabel")}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Model picker */}
+      <ModelDropdown
+        isOpen={showModelPicker}
         onClose={() => setShowModelPicker(false)}
-        mode={mode}
-        selectedId={selectedModelId}
-        onSelect={handleSelectModel}
-        userPlan={userPlan}
+        selectedModelId={selectedModelId}
+        onSelectModel={setSelectedModelId}
+        models={mode === "image" ? availableImageModels : availableVideoModels}
+        isImageMode={mode === "image"}
+        t={t}
+        getModelDescription={getModelDescription}
       />
-
-      {/* Aspect ratio picker */}
-      <Modal
-        visible={showAspectPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAspectPicker(false)}
-      >
-        <Pressable
-          style={dropStyles.backdrop}
-          onPress={() => setShowAspectPicker(false)}
-        />
-        <View style={dropStyles.panel}>
-          <Text style={dropStyles.title}>{t("aspectRatio")}</Text>
-          {availableAspectRatios.map((o) => (
-            <Pressable
-              key={o.value}
-              onPress={() => {
-                setAspectRatio(o.value);
-                setShowAspectPicker(false);
-              }}
-              style={[
-                dropStyles.item,
-                aspectRatio === o.value && dropStyles.itemSelected,
-              ]}
-            >
-              <o.Icon
-                size={16}
-                color={aspectRatio === o.value ? "#ec4899" : "#a1a1aa"}
-              />
-              <Text
-                style={[
-                  dropStyles.itemText,
-                  aspectRatio === o.value && dropStyles.itemTextSelected,
-                ]}
-              >
-                {o.value}
-              </Text>
-              {aspectRatio === o.value && <Check size={14} color="#ec4899" />}
-            </Pressable>
-          ))}
-        </View>
-      </Modal>
-
-      {/* Quality picker */}
-      <Modal
-        visible={showQualityPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowQualityPicker(false)}
-      >
-        <Pressable
-          style={dropStyles.backdrop}
-          onPress={() => setShowQualityPicker(false)}
-        />
-        <View style={dropStyles.panel}>
-          <Text style={dropStyles.title}>{t("quality")}</Text>
-          {(["low", "medium", "high"] as QualityLevel[]).map((q) => (
-            <Pressable
-              key={q}
-              onPress={() => {
-                setQuality(q);
-                setShowQualityPicker(false);
-              }}
-              style={[
-                dropStyles.item,
-                quality === q && dropStyles.itemSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  dropStyles.itemText,
-                  quality === q && dropStyles.itemTextSelected,
-                ]}
-              >
-                {q}
-              </Text>
-              {quality === q && <Check size={14} color="#ec4899" />}
-            </Pressable>
-          ))}
-        </View>
-      </Modal>
-
-      {/* Duration picker */}
-      <Modal
-        visible={showDurationPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDurationPicker(false)}
-      >
-        <Pressable
-          style={dropStyles.backdrop}
-          onPress={() => setShowDurationPicker(false)}
-        />
-        <View style={dropStyles.panel}>
-          <Text style={dropStyles.title}>{t("duration")}</Text>
-          {(videoModel?.duration.options ?? []).map((d) => (
-            <Pressable
-              key={d}
-              onPress={() => {
-                setDuration(d);
-                setShowDurationPicker(false);
-              }}
-              style={[
-                dropStyles.item,
-                duration === d && dropStyles.itemSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  dropStyles.itemText,
-                  duration === d && dropStyles.itemTextSelected,
-                ]}
-              >
-                {d}s
-              </Text>
-              {duration === d && <Check size={14} color="#ec4899" />}
-            </Pressable>
-          ))}
-        </View>
-      </Modal>
-
-      {/* Video quality picker */}
-      <Modal
-        visible={showVideoQualityPicker}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowVideoQualityPicker(false)}
-      >
-        <Pressable
-          style={dropStyles.backdrop}
-          onPress={() => setShowVideoQualityPicker(false)}
-        />
-        <View style={dropStyles.panel}>
-          <Text style={dropStyles.title}>{t("quality")}</Text>
-          {(videoModel?.qualities ?? []).map((q) => (
-            <Pressable
-              key={q}
-              onPress={() => {
-                setVideoQuality(q);
-                setShowVideoQualityPicker(false);
-              }}
-              style={[
-                dropStyles.item,
-                videoQuality === q && dropStyles.itemSelected,
-              ]}
-            >
-              <Text
-                style={[
-                  dropStyles.itemText,
-                  videoQuality === q && dropStyles.itemTextSelected,
-                ]}
-              >
-                {q}
-              </Text>
-              {videoQuality === q && <Check size={14} color="#ec4899" />}
-            </Pressable>
-          ))}
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1049,234 +1276,499 @@ export function HeroDashboard() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: { padding: 16, gap: 12 },
+  root: {
+    gap: 12,
+  },
 
+  // Mode toggle — mirrors `flex items-center gap-1 rounded-full bg-zinc-800/60 p-0.5 border border-zinc-700/50`
+  modeToggleRow: {
+    alignItems: "center",
+  },
   modeToggle: {
     flexDirection: "row",
-    alignSelf: "center",
-    backgroundColor: "rgba(24,24,27,0.8)",
-    borderRadius: 999,
-    padding: 3,
+    backgroundColor: "rgba(39,39,42,0.6)",
+    borderRadius: 99,
+    padding: 2,
     borderWidth: 1,
-    borderColor: "#27272a",
-    gap: 2,
+    borderColor: "rgba(63,63,70,0.5)",
   },
   modeBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 8,
     paddingHorizontal: 16,
-    borderRadius: 999,
+    paddingVertical: 8,
+    borderRadius: 99,
   },
-  modeBtnActive: { backgroundColor: "#ec4899" },
-  modeBtnText: { fontSize: 13, fontWeight: "500", color: "#71717a" },
-  modeBtnTextActive: { color: "#fff" },
+  modeBtnActive: {
+    backgroundColor: "#db2777", // pink-600
+  },
+  modeBtnText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#a1a1aa",
+  },
+  modeBtnTextActive: {
+    color: "#fff",
+  },
 
-  card: {
-    backgroundColor: "#0e0e12",
-    borderRadius: 20,
+  // Prompt box — mirrors `rounded-3xl border border-zinc-800/60 bg-zinc-900/80`
+  box: {
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.07)",
+    borderColor: "rgba(39,39,42,0.6)",
+    backgroundColor: "rgba(24,24,27,0.8)",
     overflow: "hidden",
   },
 
-  toolbar: {
+  // Controls bar — mirrors `flex flex-wrap items-center gap-3 px-4 py-2`
+  controlsBar: {
     flexDirection: "row",
-    alignItems: "center",
     flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: 14,
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
   },
-  toolbarChip: {
-    flexDirection: "row",
+
+  // Image reference button
+  iconBtn: {
+    width: 28,
+    height: 28,
     alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-  },
-  toolbarChipText: { fontSize: 12, color: "#d4d4d8", fontWeight: "500" },
-  modelLogo: { width: 16, height: 16 },
-
-  sliderRow: { paddingHorizontal: 14, paddingVertical: 8 },
-  sliderLabel: { fontSize: 12, color: "#71717a" },
-
-  imageModeRow: {
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 14,
-    paddingBottom: 8,
-  },
-  imageModeBtn: {
-    paddingVertical: 5,
-    paddingHorizontal: 12,
+    justifyContent: "center",
     borderRadius: 6,
-    backgroundColor: "rgba(255,255,255,0.04)",
   },
-  imageModeBtnActive: { backgroundColor: "#ec4899" },
-  imageModeBtn_text: { fontSize: 11, color: "#71717a" },
-  imageModeBtnText: { fontSize: 11, color: "#71717a" },
-  imageModeBtnTextActive: { color: "#fff" },
-
-  seedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingBottom: 8,
-  },
-  seedInput: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 12,
-    color: "#d4d4d8",
+  iconBtnDashed: {
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderStyle: "dashed",
+    borderColor: "#52525b",
   },
-  seedBtn: {
+
+  // Image previews
+  previewsRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  previewWrapper: {
+    position: "relative",
+  },
+  previewImg: {
     width: 32,
     height: 32,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#3f3f46",
+  },
+  previewRemove: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    width: 16,
+    height: 16,
+    borderRadius: 99,
+    backgroundColor: "#27272a",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  refScroll: { paddingHorizontal: 14, paddingBottom: 8 },
-  refImageWrap: { marginRight: 8 },
-  refImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#27272a",
+  // Model trigger — mirrors `flex items-center gap-2 rounded-md bg-zinc-800/60 px-2.5 py-1.5 text-xs`
+  modelTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(39,39,42,0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    maxWidth: 140,
   },
-  refImageRemove: {
-    position: "absolute",
-    top: -4,
-    right: -4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+  modelLogoBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 99,
+    overflow: "hidden",
     backgroundColor: "#3f3f46",
     alignItems: "center",
     justifyContent: "center",
   },
-
-  textarea: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    fontSize: 14,
-    color: "#fff",
-    minHeight: 80,
-    textAlignVertical: "top",
-    lineHeight: 22,
+  modelLogoImg: {
+    width: 16,
+    height: 16,
+  },
+  modelTriggerText: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#a1a1aa",
+    flex: 1,
   },
 
-  bottomBar: {
+  // Generic pill button — mirrors `rounded-full bg-zinc-800/60 px-2.5 py-1.5 text-xs`
+  pillBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255,255,255,0.05)",
-    backgroundColor: "rgba(255,255,255,0.02)",
+    gap: 4,
+    backgroundColor: "rgba(39,39,42,0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 99,
   },
-  iconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "rgba(255,255,255,0.05)",
-    alignItems: "center",
-    justifyContent: "center",
+  pillBtnText: {
+    fontSize: 11,
+    color: "#d4d4d8",
+    textTransform: "capitalize",
   },
 
-  counter: {
+  // Divider
+  dividerV: {
+    width: 1,
+    height: 16,
+    backgroundColor: "rgba(39,39,42,0.5)",
+  },
+
+  // Qty counter
+  qtyRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.05)",
     borderRadius: 8,
-    overflow: "hidden",
     borderWidth: 1,
     borderColor: "#27272a",
+    backgroundColor: "rgba(39,39,42,0.6)",
+    overflow: "hidden",
   },
-  counterBtn: {
+  qtyBtn: {
     width: 28,
     height: 28,
     alignItems: "center",
     justifyContent: "center",
   },
-  counterBtnText: { color: "#a1a1aa", fontSize: 16 },
-  counterValue: {
-    fontSize: 12,
+  qtyBtnText: {
+    fontSize: 16,
+    color: "#a1a1aa",
+    fontWeight: "300",
+  },
+  qtyValue: {
+    minWidth: 20,
+    textAlign: "center",
+    fontSize: 11,
     fontWeight: "600",
-    color: "#fff",
-    paddingHorizontal: 4,
+    color: "#e4e4e7",
   },
 
-  credits: { fontSize: 12, color: "#71717a" },
-  creditsCost: { color: "#ec4899", fontWeight: "600" },
-  creditsAvailable: { color: "#22c55e", fontWeight: "600" },
-
-  submitBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#ec4899",
+  // Video controls
+  imageModeRow: {
+    flexDirection: "row",
+    backgroundColor: "rgba(39,39,42,0.6)",
+    borderRadius: 6,
+    padding: 2,
+  },
+  imageModeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  imageModeBtnActive: {
+    backgroundColor: "#db2777",
+  },
+  imageModeBtnText: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#a1a1aa",
+  },
+  imageModeBtnTextActive: {
+    color: "#fff",
+  },
+  audioRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  audioTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#27272a",
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    maxWidth: 100,
+  },
+  audioTagText: {
+    fontSize: 10,
+    color: "#d4d4d8",
+    flex: 1,
+  },
+  seedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  seedInput: {
+    width: 64,
+    backgroundColor: "rgba(39,39,42,0.6)",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    fontSize: 10,
+    color: "#d4d4d8",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  seedBtn: {
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#ec4899",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 6,
+    backgroundColor: "rgba(39,39,42,0.6)",
+    borderRadius: 4,
   },
-  submitBtnDisabled: { opacity: 0.4, shadowOpacity: 0 },
-});
+  fixedDuration: {
+    fontSize: 10,
+    color: "#71717a",
+  },
 
-const dropStyles = StyleSheet.create({
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
+  // Prompt input — mirrors `min-h-[44px] max-h-[200px] px-4 py-4 text-sm`
+  promptInput: {
+    minHeight: 44,
+    maxHeight: 200,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    fontSize: 14,
+    color: "#fff",
+    lineHeight: 22,
   },
-  panel: {
-    position: "absolute",
-    top: "30%",
-    left: "10%",
-    right: "10%",
-    backgroundColor: "#0e0e12",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#27272a",
-    padding: 8,
+
+  // Footer row — mirrors `flex items-center justify-end gap-3 px-4 py-2.5 bg-zinc-900/25 rounded-b-3xl`
+  footerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "rgba(24,24,27,0.25)",
   },
-  title: {
+  creditsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  creditsCost: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
+    color: "#ec4899",
+  },
+  creditsSep: {
+    fontSize: 12,
+    color: "#a1a1aa",
+  },
+  creditsAvailable: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#4ade80",
+  },
+  creditsLabel: {
+    fontSize: 12,
+    color: "#71717a",
+  },
+  submitBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 99,
+    backgroundColor: "#db2777",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Dropdown shared
+  dropdownBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+  },
+  dropdownCard: {
+    backgroundColor: "#18181b",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(63,63,70,0.6)",
+    minWidth: 192,
+    overflow: "hidden",
+  },
+  dropdownLabel: {
+    fontSize: 10,
     color: "#71717a",
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  item: {
+  dropdownItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  dropdownItemRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    justifyContent: "space-between",
+    gap: 8,
   },
-  itemSelected: { backgroundColor: "rgba(236,72,153,0.1)" },
-  itemText: { flex: 1, fontSize: 14, color: "#d4d4d8" },
-  itemTextSelected: { color: "#ec4899", fontWeight: "600" },
+  dropdownItemActive: {
+    backgroundColor: "#27272a",
+  },
+  dropdownItemText: {
+    fontSize: 12,
+    color: "#a1a1aa",
+    textTransform: "capitalize",
+    flex: 1,
+  },
+  dropdownItemTextActive: {
+    color: "#fff",
+  },
+  dropdownItemMono: {
+    fontSize: 10,
+    color: "#52525b",
+    fontVariant: ["tabular-nums"],
+  },
+
+  // Credits popup
+  creditsPopup: {
+    backgroundColor: "#18181b",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#27272a",
+    padding: 12,
+    minWidth: 208,
+    gap: 8,
+  },
+  creditsPopupRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  creditsPopupMuted: {
+    fontSize: 11,
+    color: "#a1a1aa",
+  },
+  creditsPopupVal: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#fff",
+  },
+  creditsPopupTotal: {
+    borderTopWidth: 1,
+    borderTopColor: "#27272a",
+    paddingTop: 8,
+    marginTop: 4,
+  },
+  creditsPopupTotalLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#fff",
+  },
+});
+
+const dropdownStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    padding: 16,
+  },
+  panel: {
+    backgroundColor: "#18181b",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(63,63,70,0.5)",
+    overflow: "hidden",
+    maxHeight: "70%",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  headerTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#f4f4f5",
+  },
+  headerSubtitle: {
+    fontSize: 11,
+    color: "#71717a",
+    marginTop: 2,
+  },
+  closeBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  list: {
+    padding: 8,
+  },
+  modelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "transparent",
+    marginBottom: 2,
+  },
+  modelRowSelected: {
+    backgroundColor: "rgba(39,39,42,0.8)",
+  },
+  modelLogoBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(63,63,70,0.6)",
+    backgroundColor: "rgba(39,39,42,0.8)",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  modelLogo: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+  },
+  modelInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  modelNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  modelName: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#e4e4e7",
+  },
+  badge: {
+    borderRadius: 99,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  modelDesc: {
+    fontSize: 11,
+    color: "#71717a",
+    lineHeight: 16,
+  },
+  modelCredits: {
+    fontSize: 11,
+    color: "#ec4899",
+  },
 });

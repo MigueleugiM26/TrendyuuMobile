@@ -5773,12 +5773,18 @@
   "UserGallery": {
     "title": "Galleria Utente",
     "search": "Cerca...",
+    "select": "Seleziona",
+    "cancel": "Annulla",
     "filters": {
+      "label": "Filtri",
+      "applyFilters": "Applica filtri",
       "sortBy": {
         "date": "Data",
         "likes": "Mi Piace",
         "views": "Visualizzazioni",
-        "name": "Nome"
+        "name": "Nome",
+        "size": "Dimensione",
+        "duration": "Durata"
       },
       "status": {
         "all": "Tutti gli Staat",
@@ -5791,7 +5797,10 @@
         "mp3": "MP3",
         "mp4": "MP4",
         "png": "PNG",
-        "txt": "TXT"
+        "txt": "TXT",
+        "groupVideo": "Video",
+        "groupAudio": "Audio",
+        "groupImage": "Immagine"
       },
       "order": {
         "asc": "Ascendente",
@@ -5804,8 +5813,23 @@
         "aiVideo": "Video IA",
         "aiAudio": "Audio IA",
         "aiImage": "Immagine IA",
-        "aiText": "Testo IA"
+        "aiText": "Testo IA",
+        "aiMusic": "Musica IA",
+        "aiVoiceChanged": "Voce IA modificata",
+        "aiTranslatedAudio": "Audio tradotto dall'IA",
+        "aiSoundEffect": "Effetto sonoro IA",
+        "presentation": "Presentazione"
       }
+    },
+    "selection": {
+      "all": "Tutto",
+      "none": "Nessuno",
+      "zipShort": "ZIP",
+      "cancel": "Annulla",
+      "selectAll": "Seleziona tutto privato",
+      "deselectAll": "Deseleziona tutto",
+      "zip": "ZIP ({count})",
+      "delete": "Elimina ({count})"
     },
     "textFile": {
       "open": "Apri",
@@ -5904,18 +5928,38 @@
       "video": "Cerca Video",
       "uploader": "Cerca Autore"
     },
+    "galleryTabs": {
+      "explore": "Esplora",
+      "history": "Cronologia",
+      "liked": "Piaciuti"
+    },
+    "tabs": {
+      "all": "Tutto",
+      "videos": "Video",
+      "audios": "Audio",
+      "images": "Immagini",
+      "templates": "Modelli"
+    },
     "filters": {
-      "sortBy": "Ordina Per",
-      "date": "Data",
-      "likes": "Mi Piace",
-      "views": "Visualizzazioni",
-      "name": "Nome",
+      "label": "Filtri",
+      "applyFilters": "Applica filtri",
+      "sortBy": {
+        "date": "Data",
+        "likes": "Mi piace",
+        "views": "Visualizzazioni",
+        "name": "Nome",
+        "size": "Dimensione",
+        "duration": "Durata"
+      },
       "format": {
         "label": "Formato",
         "all": "Tutti i Formati",
         "mp3": "MP3",
         "mp4": "MP4",
-        "png": "PNG"
+        "png": "PNG",
+        "groupVideo": "Video",
+        "groupAudio": "Audio",
+        "groupImage": "Immagine"
       },
       "dateRange": {
         "label": "Intervallo Date",
@@ -5939,7 +5983,13 @@
         "audio": "Audio",
         "aiVideo": "Video IA",
         "aiAudio": "Audio IA",
-        "aiImage": "Immagine IA"
+        "aiImage": "Immagine IA",
+        "aiMusic": "Musica IA",
+        "aiVoiceChanged": "Voce IA modificata",
+        "aiTranslatedAudio": "Audio tradotto dall'IA",
+        "aiSoundEffect": "Effetto sonoro IA",
+        "presentation": "Presentazione",
+        "aiText": "Testo IA"
       }
     },
     "profile": {
@@ -5950,11 +6000,15 @@
     },
     "sections": {
       "userVideos": "Video di {name}",
-      "allVideos": "Tutti i Video Pubblici"
+      "allVideos": "Tutti i Video Pubblici",
+      "history": "Cronologia di visione",
+      "liked": "Video piaciuti"
     },
     "noVideos": {
       "user": "Nessun video trovato per {name}.",
-      "general": "Nessun video pubblico ancora disponibile."
+      "general": "Nessun video pubblico ancora disponibile.",
+      "history": "Non hai ancora guardato nessun video.",
+      "liked": "Non ti è ancora piaciuto nessun video."
     },
     "nsfw": "NSFW",
     "VideoPreview": {

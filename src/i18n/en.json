@@ -6427,12 +6427,18 @@
   "UserGallery": {
     "title": "User Gallery",
     "search": "Search...",
+    "select": "Select",
+    "cancel": "Cancel",
     "filters": {
+      "label": "Filters",
+      "applyFilters": "Apply Filters",
       "sortBy": {
         "date": "Date",
         "likes": "Likes",
         "views": "Views",
-        "name": "Name"
+        "name": "Name",
+        "size": "Size",
+        "duration": "Duration"
       },
       "status": {
         "all": "All Status",
@@ -6445,7 +6451,10 @@
         "mp3": "MP3",
         "mp4": "MP4",
         "png": "PNG",
-        "txt": "TXT"
+        "txt": "TXT",
+        "groupVideo": "Video",
+        "groupAudio": "Audio",
+        "groupImage": "Image"
       },
       "order": {
         "asc": "Ascending",
@@ -6458,8 +6467,23 @@
         "aiVideo": "AI Video",
         "aiAudio": "AI Audio",
         "aiImage": "AI Image",
-        "aiText": "AI Text"
+        "aiText": "AI Text",
+        "aiMusic": "AI Music",
+        "aiVoiceChanged": "AI Voice Changed",
+        "aiTranslatedAudio": "AI Translated Audio",
+        "aiSoundEffect": "AI Sound Effect",
+        "presentation": "Presentation"
       }
+    },
+    "selection": {
+      "all": "All",
+      "none": "None",
+      "zipShort": "ZIP",
+      "cancel": "Cancel",
+      "selectAll": "Select All Private",
+      "deselectAll": "Deselect All",
+      "zip": "ZIP ({count})",
+      "delete": "Delete ({count})"
     },
     "textFile": {
       "open": "Open",
@@ -6558,18 +6582,38 @@
       "video": "Search Video",
       "uploader": "Search Uploader"
     },
+    "galleryTabs": {
+      "explore": "Explore",
+      "history": "History",
+      "liked": "Liked"
+    },
+    "tabs": {
+      "all": "All",
+      "videos": "Videos",
+      "audios": "Audios",
+      "images": "Images",
+      "templates": "Templates"
+    },
     "filters": {
-      "sortBy": "Sort By",
-      "date": "Date",
-      "likes": "Likes",
-      "views": "Views",
-      "name": "Name",
+      "label": "Filters",
+      "applyFilters": "Apply Filters",
+      "sortBy": {
+        "date": "Date",
+        "likes": "Likes",
+        "views": "Views",
+        "name": "Name",
+        "size": "Size",
+        "duration": "Duration"
+      },
       "format": {
         "label": "Format",
         "all": "All Formats",
         "mp3": "MP3",
         "mp4": "MP4",
-        "png": "PNG"
+        "png": "PNG",
+        "groupVideo": "Video",
+        "groupAudio": "Audio",
+        "groupImage": "Image"
       },
       "dateRange": {
         "label": "Date Range",
@@ -6593,7 +6637,13 @@
         "audio": "Audio",
         "aiVideo": "AI Video",
         "aiAudio": "AI Audio",
-        "aiImage": "AI Image"
+        "aiImage": "AI Image",
+        "aiMusic": "AI Music",
+        "aiVoiceChanged": "AI Voice Changed",
+        "aiTranslatedAudio": "AI Translated Audio",
+        "aiSoundEffect": "AI Sound Effect",
+        "presentation": "Presentation",
+        "aiText": "AI Text"
       }
     },
     "profile": {
@@ -6604,11 +6654,15 @@
     },
     "sections": {
       "userVideos": "{name}'s Videos",
-      "allVideos": "All Public Videos"
+      "allVideos": "All Public Videos",
+      "history": "Watch History",
+      "liked": "Liked Videos"
     },
     "noVideos": {
       "user": "No videos found for {name}.",
-      "general": "No public videos available yet."
+      "general": "No public videos available yet.",
+      "history": "You haven't watched any videos yet.",
+      "liked": "You haven't liked any videos yet."
     },
     "nsfw": "NSFW",
     "VideoPreview": {

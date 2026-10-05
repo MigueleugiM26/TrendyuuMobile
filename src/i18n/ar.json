@@ -5773,12 +5773,18 @@
   "UserGallery": {
     "title": "معرض المستخدم",
     "search": "البحث...",
+    "select": "تحديد",
+    "cancel": "إلغاء",
     "filters": {
+      "label": "عوامل التصفية",
+      "applyFilters": "تطبيق عوامل التصفية",
       "sortBy": {
         "date": "التاريخ",
         "likes": "الإعجابات",
         "views": "المشاهدات",
-        "name": "الاسم"
+        "name": "الاسم",
+        "size": "الحجم",
+        "duration": "المدة"
       },
       "status": {
         "all": "كل الحالات",
@@ -5791,7 +5797,10 @@
         "mp3": "MP3",
         "mp4": "MP4",
         "png": "PNG",
-        "txt": "TXT"
+        "txt": "TXT",
+        "groupVideo": "فيديو",
+        "groupAudio": "صوت",
+        "groupImage": "صورة"
       },
       "order": {
         "asc": "تصاعدي",
@@ -5804,8 +5813,23 @@
         "aiVideo": "فيديو ذكاء اصطناعي",
         "aiAudio": "صوت ذكاء اصطناعي",
         "aiImage": "صورة ذكاء اصطناعي",
-        "aiText": "نص الذكاء الاصطناعي"
+        "aiText": "نص الذكاء الاصطناعي",
+        "aiMusic": "موسيقى AI",
+        "aiVoiceChanged": "صوت AI مُعدّل",
+        "aiTranslatedAudio": "صوت AI مترجم",
+        "aiSoundEffect": "مؤثر صوتي AI",
+        "presentation": "عرض تقديمي"
       }
+    },
+    "selection": {
+      "all": "الكل",
+      "none": "لا شيء",
+      "zipShort": "ZIP",
+      "cancel": "إلغاء",
+      "selectAll": "تحديد الكل خاص",
+      "deselectAll": "إلغاء تحديد الكل",
+      "zip": "ZIP ({count})",
+      "delete": "حذف ({count})"
     },
     "textFile": {
       "open": "فتح",
@@ -5904,18 +5928,38 @@
       "video": "البحث عن الفيديو",
       "uploader": "البحث عن الرافع"
     },
+    "galleryTabs": {
+      "explore": "استكشاف",
+      "history": "السجل",
+      "liked": "المفضلة"
+    },
+    "tabs": {
+      "all": "الكل",
+      "videos": "فيديوهات",
+      "audios": "صوتيات",
+      "images": "صور",
+      "templates": "قوالب"
+    },
     "filters": {
-      "sortBy": "ترتيب حسب",
-      "date": "التاريخ",
-      "likes": "الإعجابات",
-      "views": "المشاهدات",
-      "name": "الاسم",
+      "label": "عوامل التصفية",
+      "applyFilters": "تطبيق عوامل التصفية",
+      "sortBy": {
+        "date": "التاريخ",
+        "likes": "الإعجابات",
+        "views": "المشاهدات",
+        "name": "الاسم",
+        "size": "الحجم",
+        "duration": "المدة"
+      },
       "format": {
         "label": "التنسيق",
         "all": "كل التنسيقات",
         "mp3": "MP3",
         "mp4": "MP4",
-        "png": "PNG"
+        "png": "PNG",
+        "groupVideo": "فيديو",
+        "groupAudio": "صوت",
+        "groupImage": "صورة"
       },
       "dateRange": {
         "label": "نطاق التاريخ",
@@ -5939,7 +5983,13 @@
         "audio": "صوت",
         "aiVideo": "فيديو ذكاء اصطناعي",
         "aiAudio": "صوت ذكاء اصطناعي",
-        "aiImage": "صورة ذكاء اصطناعي"
+        "aiImage": "صورة ذكاء اصطناعي",
+        "aiMusic": "موسيقى AI",
+        "aiVoiceChanged": "صوت AI مُعدّل",
+        "aiTranslatedAudio": "صوت AI مترجم",
+        "aiSoundEffect": "مؤثر صوتي AI",
+        "presentation": "عرض تقديمي",
+        "aiText": "نص AI"
       }
     },
     "profile": {
@@ -5950,11 +6000,15 @@
     },
     "sections": {
       "userVideos": "فيديوهات {name}",
-      "allVideos": "جميع الفيديوهات العامة"
+      "allVideos": "جميع الفيديوهات العامة",
+      "history": "سجل المشاهدة",
+      "liked": "الفيديوهات المفضلة"
     },
     "noVideos": {
       "user": "لا فيديوهات موجودة لـ {name}.",
-      "general": "لا فيديوهات عامة متاحة بعد."
+      "general": "لا فيديوهات عامة متاحة بعد.",
+      "history": "لم تشاهد أي فيديوهات بعد.",
+      "liked": "لم تعجب بأي فيديوهات بعد."
     },
     "nsfw": "NSFW",
     "VideoPreview": {

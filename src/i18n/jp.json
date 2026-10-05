@@ -5775,12 +5775,18 @@
   "UserGallery": {
     "title": "ユーザーギャラリー",
     "search": "検索...",
+    "select": "選択",
+    "cancel": "キャンセル",
     "filters": {
+      "label": "フィルター",
+      "applyFilters": "フィルターを適用",
       "sortBy": {
         "date": "日付",
         "likes": "いいね",
         "views": "視聴",
-        "name": "名前"
+        "name": "名前",
+        "size": "サイズ",
+        "duration": "再生時間"
       },
       "status": {
         "all": "すべてのステータス",
@@ -5793,7 +5799,10 @@
         "mp3": "MP3",
         "mp4": "MP4",
         "png": "PNG",
-        "txt": "TXT"
+        "txt": "TXT",
+        "groupVideo": "動画",
+        "groupAudio": "音声",
+        "groupImage": "画像"
       },
       "order": {
         "asc": "昇順",
@@ -5806,8 +5815,23 @@
         "aiVideo": "AIビデオ",
         "aiAudio": "AIオーディオ",
         "aiImage": "AI画像",
-        "aiText": "AIテキスト"
+        "aiText": "AIテキスト",
+        "aiMusic": "AI音楽",
+        "aiVoiceChanged": "AI音声変更",
+        "aiTranslatedAudio": "AI翻訳音声",
+        "aiSoundEffect": "AI効果音",
+        "presentation": "プレゼンテーション"
       }
+    },
+    "selection": {
+      "all": "すべて",
+      "none": "なし",
+      "zipShort": "ZIP",
+      "cancel": "キャンセル",
+      "selectAll": "すべてのプライベートを選択",
+      "deselectAll": "すべて選択解除",
+      "zip": "ZIP ({count})",
+      "delete": "削除 ({count})"
     },
     "textFile": {
       "open": "開く",
@@ -5906,18 +5930,38 @@
       "video": "ビデオ検索",
       "uploader": "アップローダー検索"
     },
+    "galleryTabs": {
+      "explore": "探索",
+      "history": "履歴",
+      "liked": "お気に入り"
+    },
+    "tabs": {
+      "all": "すべて",
+      "videos": "動画",
+      "audios": "音声",
+      "images": "画像",
+      "templates": "テンプレート"
+    },
     "filters": {
-      "sortBy": "並び替え",
-      "date": "日付",
-      "likes": "いいね",
-      "views": "視聴",
-      "name": "名前",
+      "label": "フィルター",
+      "applyFilters": "フィルターを適用",
+      "sortBy": {
+        "date": "日付",
+        "likes": "いいね",
+        "views": "再生回数",
+        "name": "名前",
+        "size": "サイズ",
+        "duration": "再生時間"
+      },
       "format": {
         "label": "形式",
         "all": "すべての形式",
         "mp3": "MP3",
         "mp4": "MP4",
-        "png": "PNG"
+        "png": "PNG",
+        "groupVideo": "動画",
+        "groupAudio": "音声",
+        "groupImage": "画像"
       },
       "dateRange": {
         "label": "日付範囲",
@@ -5941,7 +5985,13 @@
         "audio": "オーディオ",
         "aiVideo": "AIビデオ",
         "aiAudio": "AIオーディオ",
-        "aiImage": "AI画像"
+        "aiImage": "AI画像",
+        "aiMusic": "AI音楽",
+        "aiVoiceChanged": "AI音声変更",
+        "aiTranslatedAudio": "AI翻訳音声",
+        "aiSoundEffect": "AI効果音",
+        "presentation": "プレゼンテーション",
+        "aiText": "AIテキスト"
       }
     },
     "profile": {
@@ -5952,11 +6002,15 @@
     },
     "sections": {
       "userVideos": "{name}のビデオ",
-      "allVideos": "すべての公開ビデオ"
+      "allVideos": "すべての公開ビデオ",
+      "history": "視聴履歴",
+      "liked": "お気に入りの動画"
     },
     "noVideos": {
       "user": "{name}のビデオなし。",
-      "general": "公開ビデオなし。"
+      "general": "公開ビデオなし。",
+      "history": "まだ動画を視聴していません。",
+      "liked": "まだ動画にいいねしていません。"
     },
     "nsfw": "NSFW",
     "VideoPreview": {

@@ -5772,12 +5772,18 @@
   "UserGallery": {
     "title": "사용자 갤러리",
     "search": "검색...",
+    "select": "선택",
+    "cancel": "취소",
     "filters": {
+      "label": "필터",
+      "applyFilters": "필터 적용",
       "sortBy": {
         "date": "날짜",
         "likes": "좋아요",
         "views": "조회수",
-        "name": "이름"
+        "name": "이름",
+        "size": "크기",
+        "duration": "길이"
       },
       "status": {
         "all": "모든 상태",
@@ -5790,7 +5796,10 @@
         "mp3": "MP3",
         "mp4": "MP4",
         "png": "PNG",
-        "txt": "TXT"
+        "txt": "TXT",
+        "groupVideo": "동영상",
+        "groupAudio": "오디오",
+        "groupImage": "이미지"
       },
       "order": {
         "asc": "오름차순",
@@ -5803,8 +5812,23 @@
         "aiVideo": "AI 비디오",
         "aiAudio": "AI 오디오",
         "aiImage": "AI 이미지",
-        "aiText": "AI 텍스트"
+        "aiText": "AI 텍스트",
+        "aiMusic": "AI 음악",
+        "aiVoiceChanged": "AI 음성 변경",
+        "aiTranslatedAudio": "AI 번역 오디오",
+        "aiSoundEffect": "AI 음향 효과",
+        "presentation": "프레젠테이션"
       }
+    },
+    "selection": {
+      "all": "전체",
+      "none": "없음",
+      "zipShort": "ZIP",
+      "cancel": "취소",
+      "selectAll": "모든 비공개 선택",
+      "deselectAll": "모두 선택 해제",
+      "zip": "ZIP ({count})",
+      "delete": "삭제 ({count})"
     },
     "textFile": {
       "open": "열기",
@@ -5903,18 +5927,38 @@
       "video": "비디오 검색",
       "uploader": "업로더 검색"
     },
+    "galleryTabs": {
+      "explore": "탐색",
+      "history": "기록",
+      "liked": "좋아요"
+    },
+    "tabs": {
+      "all": "전체",
+      "videos": "동영상",
+      "audios": "오디오",
+      "images": "이미지",
+      "templates": "템플릿"
+    },
     "filters": {
-      "sortBy": "정렬 기준",
-      "date": "날짜",
-      "likes": "좋아요",
-      "views": "조회수",
-      "name": "이름",
+      "label": "필터",
+      "applyFilters": "필터 적용",
+      "sortBy": {
+        "date": "날짜",
+        "likes": "좋아요",
+        "views": "조회수",
+        "name": "이름",
+        "size": "크기",
+        "duration": "길이"
+      },
       "format": {
         "label": "형식",
         "all": "모든 형식",
         "mp3": "MP3",
         "mp4": "MP4",
-        "png": "PNG"
+        "png": "PNG",
+        "groupVideo": "동영상",
+        "groupAudio": "오디오",
+        "groupImage": "이미지"
       },
       "dateRange": {
         "label": "날짜 범위",
@@ -5938,7 +5982,13 @@
         "audio": "오디오",
         "aiVideo": "AI 비디오",
         "aiAudio": "AI 오디오",
-        "aiImage": "AI 이미지"
+        "aiImage": "AI 이미지",
+        "aiMusic": "AI 음악",
+        "aiVoiceChanged": "AI 음성 변경",
+        "aiTranslatedAudio": "AI 번역 오디오",
+        "aiSoundEffect": "AI 음향 효과",
+        "presentation": "프레젠테이션",
+        "aiText": "AI 텍스트"
       }
     },
     "profile": {
@@ -5949,11 +5999,15 @@
     },
     "sections": {
       "userVideos": "{name}의 비디오",
-      "allVideos": "모든 공개 비디오"
+      "allVideos": "모든 공개 비디오",
+      "history": "시청 기록",
+      "liked": "좋아요한 동영상"
     },
     "noVideos": {
       "user": "{name}에 대한 비디오 없음.",
-      "general": "아직 공개 비디오 없음."
+      "general": "아직 공개 비디오 없음.",
+      "history": "아직 시청한 동영상이 없습니다.",
+      "liked": "아직 좋아요한 동영상이 없습니다."
     },
     "nsfw": "NSFW",
     "VideoPreview": {

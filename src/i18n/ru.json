@@ -5815,12 +5815,18 @@
   "UserGallery": {
     "title": "Галерея пользователя",
     "search": "Поиск...",
+    "select": "Выбрать",
+    "cancel": "Отмена",
     "filters": {
+      "label": "Фильтры",
+      "applyFilters": "Применить фильтры",
       "sortBy": {
         "date": "Дата",
         "likes": "Лайки",
         "views": "Просмотры",
-        "name": "Название"
+        "name": "Название",
+        "size": "Размер",
+        "duration": "Длительность"
       },
       "status": {
         "all": "Все статусы",
@@ -5833,7 +5839,10 @@
         "mp3": "MP3",
         "mp4": "MP4",
         "png": "PNG",
-        "txt": "TXT"
+        "txt": "TXT",
+        "groupVideo": "Видео",
+        "groupAudio": "Аудио",
+        "groupImage": "Изображение"
       },
       "order": {
         "asc": "По возрастанию",
@@ -5846,8 +5855,23 @@
         "aiVideo": "ИИ-видео",
         "aiAudio": "ИИ-аудио",
         "aiImage": "ИИ-изображение",
-        "aiText": "ИИ-текст"
+        "aiText": "ИИ-текст",
+        "aiMusic": "ИИ-музыка",
+        "aiVoiceChanged": "Изменённый ИИ-голос",
+        "aiTranslatedAudio": "ИИ-переведённое аудио",
+        "aiSoundEffect": "ИИ-звуковой эффект",
+        "presentation": "Презентация"
       }
+    },
+    "selection": {
+      "all": "Все",
+      "none": "Нет",
+      "zipShort": "ZIP",
+      "cancel": "Отмена",
+      "selectAll": "Выбрать все приватные",
+      "deselectAll": "Снять выделение со всех",
+      "zip": "ZIP ({count})",
+      "delete": "Удалить ({count})"
     },
     "textFile": {
       "open": "Открыть",
@@ -5946,18 +5970,38 @@
       "video": "Поиск видео",
       "uploader": "Поиск автора"
     },
+    "galleryTabs": {
+      "explore": "Обзор",
+      "history": "История",
+      "liked": "Понравившиеся"
+    },
+    "tabs": {
+      "all": "Все",
+      "videos": "Видео",
+      "audios": "Аудио",
+      "images": "Изображения",
+      "templates": "Шаблоны"
+    },
     "filters": {
-      "sortBy": "Сортировать",
-      "date": "Дата",
-      "likes": "Лайки",
-      "views": "Просмотры",
-      "name": "Название",
+      "label": "Фильтры",
+      "applyFilters": "Применить фильтры",
+      "sortBy": {
+        "date": "Дата",
+        "likes": "Лайки",
+        "views": "Просмотры",
+        "name": "Название",
+        "size": "Размер",
+        "duration": "Длительность"
+      },
       "format": {
         "label": "Формат",
         "all": "Все форматы",
         "mp3": "MP3",
         "mp4": "MP4",
-        "png": "PNG"
+        "png": "PNG",
+        "groupVideo": "Видео",
+        "groupAudio": "Аудио",
+        "groupImage": "Изображение"
       },
       "dateRange": {
         "label": "Период",
@@ -5981,7 +6025,13 @@
         "audio": "Аудио",
         "aiVideo": "ИИ-видео",
         "aiAudio": "ИИ-аудио",
-        "aiImage": "ИИ-изображение"
+        "aiImage": "ИИ-изображение",
+        "aiMusic": "ИИ-музыка",
+        "aiVoiceChanged": "Изменённый ИИ-голос",
+        "aiTranslatedAudio": "ИИ-переведённое аудио",
+        "aiSoundEffect": "ИИ-звуковой эффект",
+        "presentation": "Презентация",
+        "aiText": "ИИ-текст"
       }
     },
     "profile": {
@@ -5992,11 +6042,15 @@
     },
     "sections": {
       "userVideos": "Видео {name}",
-      "allVideos": "Все публичные видео"
+      "allVideos": "Все публичные видео",
+      "history": "История просмотров",
+      "liked": "Понравившиеся видео"
     },
     "noVideos": {
       "user": "Видео {name} не найдены.",
-      "general": "Пока нет публичных видео."
+      "general": "Пока нет публичных видео.",
+      "history": "Вы ещё не смотрели ни одного видео.",
+      "liked": "Вам ещё не понравилось ни одно видео."
     },
     "nsfw": "NSFW",
     "VideoPreview": {

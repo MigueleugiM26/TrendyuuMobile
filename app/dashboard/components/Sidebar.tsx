@@ -427,6 +427,19 @@ export function Sidebar({
         style={drawerStyles.scroll}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── TrendYuu Studio */}
+        <NavItem
+          icon={
+            <BarChart3
+              size={16}
+              color={isActiveRoute("/trendyuu-studio") ? "#f472b6" : "#e4e4e7"}
+            />
+          }
+          label={t("trendyuuStudio")}
+          active={isActiveRoute("/trendyuu-studio")}
+          onPress={() => handleNavigation("/trendyuu-studio")}
+        />
+
         {/* ── Create button (mobile gradient, same as web `isMobile` branch) */}
         <View style={drawerStyles.section}>
           <Pressable
@@ -440,19 +453,6 @@ export function Sidebar({
             <Text style={drawerStyles.createBtnText}>{t("create")}</Text>
           </Pressable>
         </View>
-
-        {/* ── TrendYuu Studio */}
-        <NavItem
-          icon={
-            <BarChart3
-              size={16}
-              color={isActiveRoute("/trendyuu-studio") ? "#f472b6" : "#e4e4e7"}
-            />
-          }
-          label={t("trendyuuStudio")}
-          active={isActiveRoute("/trendyuu-studio")}
-          onPress={() => handleNavigation("/trendyuu-studio")}
-        />
 
         {/* ── Tools section */}
         <SectionLabel label={t("toolsSection")} />
